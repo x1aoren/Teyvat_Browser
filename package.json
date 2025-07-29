@@ -1,0 +1,56 @@
+{
+  "name": "teyvat-browser",
+  "version": "1.0.0",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["electron", "genshin-impact", "browser"],
+  "author": "Teyvat Developer",
+  "license": "ISC",
+  "description": "一个原神风格的B站视频浏览器",
+  "dependencies": {
+    "electron": "^37.2.4",
+    "electron-store": "^10.1.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.teyvat.browser",
+    "productName": "提瓦特浏览器",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "src/renderer/assets/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src/renderer/assets/logo.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "src/renderer/assets/logo.png"
+    }
+  }
+}

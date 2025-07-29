@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提瓦特浏览器</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script src="./assets/icon-placeholder.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- 顶部标题栏 -->
+    <header class="header">
+      <div class="logo">
+        <img src="./assets/logo.png" alt="提瓦特浏览器" class="logo-img">
+        <h1 class="app-title">提瓦特浏览器</h1>
+      </div>
+      <div class="header-controls">
+        <button id="toggleBrowserBtn" class="control-btn">
+          <img src="./assets/icons/browser.png" alt="浏览器" class="btn-icon">
+          <span class="btn-text">浏览器</span>
+        </button>
+        <button id="settingsBtn" class="control-btn">
+          <img src="./assets/icons/settings.png" alt="设置" class="btn-icon">
+          <span class="btn-text">设置</span>
+        </button>
+        <button id="aboutBtn" class="control-btn">
+          <img src="./assets/icons/about.png" alt="关于" class="btn-icon">
+          <span class="btn-text">关于</span>
+        </button>
+      </div>
+    </header>
+    
+    <!-- 快捷键状态区域 -->
+    <div class="shortcut-status">
+      <div class="shortcut-grid">
+        <div class="shortcut-item">
+          <span class="key">Space</span>
+          <span class="action">播放/暂停</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="key">←</span>
+          <span class="action">后退5秒</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="key">→</span>
+          <span class="action">前进5秒</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="key">Ctrl+↑/↓</span>
+          <span class="action">调整透明度</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="key">Insert</span>
+          <span class="action">显示/隐藏</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 页面内容区域 -->
+    <main class="content">
+      <!-- 初始提示 -->
+      <div id="homeView" class="view active">
+        <div class="home-content">
+          <div class="character-silhouette"></div>
+          <div class="welcome-text">
+            <h2>欢迎使用提瓦特浏览器</h2>
+            <p>按下 <kbd>Insert</kbd> 或点击上方"浏览器"按钮开始探索世界</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 设置页面 -->
+      <div id="settingsView" class="view">
+        <h2 class="view-title">快捷键设置</h2>
+        <div class="shortcuts-settings">
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">显示/隐藏浏览器:</span>
+            <button class="shortcut-button" data-action="toggleBrowser">Insert</button>
+          </div>
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">播放/暂停:</span>
+            <button class="shortcut-button" data-action="playPause">Space</button>
+          </div>
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">后退5秒:</span>
+            <button class="shortcut-button" data-action="rewind">Left</button>
+          </div>
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">前进5秒:</span>
+            <button class="shortcut-button" data-action="forward">Right</button>
+          </div>
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">增加透明度:</span>
+            <button class="shortcut-button" data-action="increaseOpacity">Control+Up</button>
+          </div>
+          <div class="shortcut-setting-item">
+            <span class="shortcut-label">减少透明度:</span>
+            <button class="shortcut-button" data-action="decreaseOpacity">Control+Down</button>
+          </div>
+        </div>
+        
+        <div class="opacity-settings">
+          <h3>浏览器透明度</h3>
+          <div class="opacity-control">
+            <button id="decreaseOpacityBtn">-</button>
+            <label for="opacitySlider">透明度调节</label>
+            <input type="range" id="opacitySlider" min="0.2" max="1" step="0.1" value="0.8" aria-label="透明度调节">
+            <button id="increaseOpacityBtn">+</button>
+            <span id="opacityValue">0.8</span>
+          </div>
+        </div>
+        
+        <div class="settings-actions">
+          <button id="resetBtn" class="reset-button">恢复默认设置</button>
+          <button id="backBtn" class="back-button">返回</button>
+        </div>
+      </div>
+      
+      <!-- 关于页面 -->
+      <div id="aboutView" class="view">
+        <h2 class="view-title">关于提瓦特浏览器</h2>
+        <div class="about-content">
+          <div class="about-logo">
+            <img src="./assets/logo.png" alt="提瓦特浏览器" class="about-logo-img">
+          </div>
+          <div class="about-info">
+            <p class="app-version">版本: 1.0.0</p>
+            <p>提瓦特浏览器是一款基于Electron的B站视频播放控制工具</p>
+            <p>开发者: Teyvat Developer</p>
+            <p class="copyright">本软件中原神相关元素版权归米哈游所有</p>
+            <p>"原神"是米哈游的注册商标</p>
+          </div>
+          <button id="aboutBackBtn" class="back-button">返回</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html> 
