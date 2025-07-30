@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
   // 从渲染器到主进程
   send: (channel, data) => {
-    const validChannels = ['toggle-browser', 'adjust-opacity', 'update-shortcuts', 'navigate-browser', 'get-initial-settings', 'set-gpu-acceleration'];
+    const validChannels = ['toggle-browser', 'adjust-opacity', 'update-shortcuts', 'navigate-browser', 'get-initial-settings', 'set-gpu-acceleration', 'open-external-link'];
     if (validChannels.includes(channel)) {
       ipcRenderer.send(channel, data);
     }

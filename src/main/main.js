@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, globalShortcut, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, screen, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -50,12 +50,15 @@ function createMainWindow() {
     width,
     height,
     title: '提瓦特浏览器 - 控制台',
+    icon: path.join(__dirname, '../renderer/assets/logo.png'), // 设置窗口图标
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  mainWindow.removeMenu(); // 移除菜单栏
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
@@ -117,6 +120,7 @@ function createBrowserWindow(url) {
     transparent: false, // 禁用透明
     autoHideMenuBar: true, // 隐藏菜单栏 (文件, 视图等)
     fullscreenable: false, // 禁止窗口进入OS全屏，以优化网页内视频的全屏体验
+    icon: path.join(__dirname, '../renderer/assets/logo.png'), // 设置窗口图标
     alwaysOnTop: true, // 始终置顶
     show: false,
     webPreferences: {
@@ -410,6 +414,10 @@ ipcMain.on('get-initial-settings', (event) => {
     opacity: store.get('browserOpacity'),
     enableGpu: store.get('enableGpuAcceleration')
   });
+});
+
+ipcMain.on('open-external-link', (event, url) => {
+  shell.openExternal(url);
 });
 
 ipcMain.on('set-gpu-acceleration', (event, enabled) => {

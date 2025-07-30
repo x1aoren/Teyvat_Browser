@@ -18,6 +18,7 @@ const opacitySlider = document.getElementById('opacitySlider');
 const opacityValue = document.getElementById('opacityValue');
 const decreaseOpacityBtn = document.getElementById('decreaseOpacityBtn');
 const increaseOpacityBtn = document.getElementById('increaseOpacityBtn');
+const authorLink = document.getElementById('authorLink');
 
 // 视图元素
 const views = {
@@ -138,6 +139,12 @@ function setupEventListeners() {
     window.electron.send('set-gpu-acceleration', gpuToggle.checked);
   });
   
+  // 作者链接
+  authorLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.electron.send('open-external-link', 'https://space.bilibili.com/3546947579283775');
+  });
+
   // 主进程消息监听
   window.electron.receive('browser-window-closed', () => {
     updateBrowserButtonState(false);

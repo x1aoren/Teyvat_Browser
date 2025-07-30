@@ -33,4 +33,15 @@ yarn-error.log*
 
 # Electron
 .electron-builder/
-app.asar 
+app.asar
+
+# Optional directories
+.tmp/
+coverage/
+.nyc_output/
+
+# Optional files
+.env
+.DS_Store
+*.pem
+*.key 

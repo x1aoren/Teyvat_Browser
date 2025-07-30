@@ -62,6 +62,16 @@ npm run build:win
 - **HTML/CSS/JavaScript**: 前端开发
 - **electron-store**: 配置存储
 
+## 配置文件路径
+
+本应用的配置文件（包括快捷键、窗口位置等）由 `electron-store` 管理，存储在您本地计算机的标准用户数据目录中。
+
+- **Windows**: `%APPDATA%\teyvat-browser\config.json`
+- **macOS**: `~/Library/Application Support/teyvat-browser/config.json`
+- **Linux**: `~/.config/teyvat-browser/config.json`
+
+*您可以在文件资源管理器的地址栏输入 `%APPDATA%` 来快速访问 Windows 上的对应文件夹。*
+
 ## 许可证
 
 ISC
