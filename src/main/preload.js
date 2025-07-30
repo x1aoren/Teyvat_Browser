@@ -2,16 +2,16 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // 暴露安全的API到渲染进程
 contextBridge.exposeInMainWorld('electron', {
-  // 发送消息到主进程
+  // 从渲染器到主进程
   send: (channel, data) => {
-    const validChannels = ['toggle-browser', 'update-shortcuts', 'adjust-opacity'];
+    const validChannels = ['toggle-browser', 'adjust-opacity', 'update-shortcuts', 'navigate-browser', 'get-initial-settings', 'set-gpu-acceleration'];
     if (validChannels.includes(channel)) {
       ipcRenderer.send(channel, data);
     }
   },
   // 监听主进程消息
   receive: (channel, func) => {
-    const validChannels = ['browser-window-created', 'browser-window-closed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate'];
+    const validChannels = ['browser-window-created', 'browser-window-closed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate', 'initial-settings'];
     if (validChannels.includes(channel)) {
       // 删除旧的事件监听器以避免重复
       ipcRenderer.removeAllListeners(channel);

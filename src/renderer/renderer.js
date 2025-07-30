@@ -8,8 +8,11 @@ const homeBtn = document.getElementById('homeBtn');
 const toggleBrowserBtn = document.getElementById('toggleBrowserBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const aboutBtn = document.getElementById('aboutBtn');
+const urlInput = document.getElementById('urlInput');
+const navigateBtn = document.getElementById('navigateBtn');
 const backBtn = document.getElementById('backBtn');
 const aboutBackBtn = document.getElementById('aboutBackBtn');
+const gpuToggle = document.getElementById('gpuToggle');
 const resetBtn = document.getElementById('resetBtn');
 const opacitySlider = document.getElementById('opacitySlider');
 const opacityValue = document.getElementById('opacityValue');
@@ -26,9 +29,9 @@ const views = {
 // 快捷键配置
 const defaultShortcuts = {
   toggleBrowser: 'Insert',
-  playPause: 'Space',
-  rewind: 'Left',
-  forward: 'Right',
+  playPause: 'Shift+F1',
+  rewind: 'Shift+F2',
+  forward: 'Shift+F3',
   increaseOpacity: 'Control+Up',
   decreaseOpacity: 'Control+Down'
 };
@@ -57,6 +60,25 @@ function setupEventListeners() {
     window.electron.send('toggle-browser');
   });
   
+  // URL跳转
+  const navigateToUrl = () => {
+    let url = urlInput.value.trim();
+    if (url) {
+      // 自动为URL添加 http:// 前缀
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      window.electron.send('navigate-browser', url);
+    }
+  };
+  
+  navigateBtn.addEventListener('click', navigateToUrl);
+  urlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      navigateToUrl();
+    }
+  });
+
   // 导航按钮
   homeBtn.addEventListener('click', () => {
     showView('homeView');
@@ -110,6 +132,11 @@ function setupEventListeners() {
       startListeningForShortcut(button);
     });
   });
+
+  // GPU加速开关
+  gpuToggle.addEventListener('change', () => {
+    window.electron.send('set-gpu-acceleration', gpuToggle.checked);
+  });
   
   // 主进程消息监听
   window.electron.receive('browser-window-closed', () => {
@@ -131,6 +158,17 @@ function setupEventListeners() {
   
   window.electron.receive('navigate', (view) => {
     showView(`${view}View`);
+  });
+  
+  window.electron.receive('initial-settings', ({ shortcuts: loadedShortcuts, opacity, enableGpu }) => {
+    shortcuts = loadedShortcuts;
+    updateShortcutButtons();
+    updateShortcutDisplay();
+    
+    opacitySlider.value = opacity;
+    opacityValue.textContent = opacity.toFixed(1);
+
+    gpuToggle.checked = enableGpu;
   });
 }
 
@@ -314,6 +352,7 @@ function highlightShortcutAction(action) {
 // 初始化时请求一次初始状态
 document.addEventListener('DOMContentLoaded', () => {
   init();
+  window.electron.send('get-initial-settings');
   // 注意：由于无法直接从渲染进程知道播放器窗口是否已打开，
   // 我们依赖主进程在窗口关闭时发送的消息来更新状态。
   // 启动时，我们假定窗口是关闭的。

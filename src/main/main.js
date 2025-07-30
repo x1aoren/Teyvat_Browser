@@ -19,18 +19,25 @@ function debounce(func, wait) {
 const store = new Store({
   defaults: {
     mainWindowBounds: { width: 800, height: 600 },
-    browserWindowBounds: { width: 400, height: 300, x: 50, y: 50 },
+    browserWindowBounds: { width: 400, height: 720, x: 50, y: 50 },
+    lastUrl: 'https://www.bilibili.com',
     shortcuts: {
       toggleBrowser: 'Insert',
-      playPause: 'Space',
-      rewind: 'Left',
-      forward: 'Right',
+      playPause: 'Shift+F1',
+      rewind: 'Shift+F2',
+      forward: 'Shift+F3',
       increaseOpacity: 'Control+Up',
       decreaseOpacity: 'Control+Down'
     },
     browserOpacity: 0.8,
+    enableGpuAcceleration: false
   }
 });
+
+// 根据设置决定是否禁用GPU硬件加速
+if (!store.get('enableGpuAcceleration')) {
+  app.disableHardwareAcceleration();
+}
 
 // 主窗口和播放器窗口
 let mainWindow = null;
@@ -70,7 +77,7 @@ function createMainWindow() {
 }
 
 // 创建播放器窗口
-function createBrowserWindow() {
+function createBrowserWindow(url) {
   if (browserWindow) {
     browserWindow.focus();
     return;
@@ -106,8 +113,9 @@ function createBrowserWindow() {
     x,
     y,
     title: '提瓦特浏览器',
-    frame: true, // 使用原生边框
+    frame: true, // 改回带边框的窗口以确保稳定性
     transparent: false, // 禁用透明
+    autoHideMenuBar: true, // 隐藏菜单栏 (文件, 视图等)
     alwaysOnTop: true, // 始终置顶
     show: false,
     webPreferences: {
@@ -116,24 +124,33 @@ function createBrowserWindow() {
     }
   });
 
-  browserWindow.loadURL('https://www.bilibili.com');
-  
   browserWindow.once('ready-to-show', () => {
     browserWindow.show();
   });
   
-  // 设置透明度
+  const urlToLoad = url || store.get('lastUrl');
+  browserWindow.loadURL(urlToLoad);
+  store.set('lastUrl', urlToLoad);
+  
+  // 设置初始透明度
   browserWindow.setOpacity(store.get('browserOpacity'));
 
-  browserWindow.on('resize', () => {
-    const { width, height } = browserWindow.getBounds();
-    store.set('browserWindowBounds', { ...store.get('browserWindowBounds'), width, height });
+  // 根据焦点状态智能调整透明度
+  browserWindow.on('focus', () => {
+    browserWindow.setOpacity(1.0);
+  });
+  browserWindow.on('blur', () => {
+    browserWindow.setOpacity(store.get('browserOpacity'));
   });
 
-  browserWindow.on('move', () => {
-    const { x, y } = browserWindow.getBounds();
-    store.set('browserWindowBounds', { ...store.get('browserWindowBounds'), x, y });
-  });
+  // 使用防抖保存窗口位置和大小
+  const debouncedSaveBounds = debounce(() => {
+    const bounds = browserWindow.getBounds();
+    store.set('browserWindowBounds', bounds);
+  }, 500);
+
+  browserWindow.on('resize', debouncedSaveBounds);
+  browserWindow.on('move', debouncedSaveBounds);
 
   browserWindow.on('closed', () => {
     browserWindow = null;
@@ -166,21 +183,30 @@ function toggleBrowserVisibility() {
     }
     registerShortcuts(); // 切换可见性后重新注册快捷键
   } else {
-    createBrowserWindow();
+    createBrowserWindow(); // 调用时不带URL，使用默认值
   }
 }
 
-// 最小化或恢复浏览器窗口
-function minimizeOrRestoreBrowserWindow() {
-  if (browserWindow && browserWindow.isVisible()) {
-    if (browserWindow.isMinimized()) {
-      browserWindow.restore();
-    } else {
-      browserWindow.minimize();
-    }
+// 快捷键功能：最小化/恢复/显示窗口
+function handleToggleShortcut() {
+  if (!browserWindow) {
+    return; // 如果窗口不存在，则不执行任何操作
+  }
+
+  if (browserWindow.isMinimized()) {
+    browserWindow.restore();
+  } else if (!browserWindow.isVisible()) {
+    browserWindow.show();
+  } else {
+    browserWindow.minimize();
+  }
+  
+  // 确保窗口在操作后获得焦点
+  if (browserWindow.isVisible() && !browserWindow.isMinimized()) {
+    browserWindow.focus();
   }
 }
-const debouncedMinimizeOrRestore = debounce(minimizeOrRestoreBrowserWindow, 300);
+const debouncedToggleShortcut = debounce(handleToggleShortcut, 150);
 
 function adjustBrowserOpacity(delta) {
   if (!browserWindow) return;
@@ -194,24 +220,6 @@ function adjustBrowserOpacity(delta) {
     mainWindow.webContents.send('browser-opacity-changed', opacity);
   }
 }
-
-const mediaActions = {
-  playPause: `
-    const video = document.querySelector('video');
-    if (video) {
-      if (video.paused) video.play(); else video.pause();
-      true;
-    } else { false; }
-  `,
-  rewind: `
-    const video = document.querySelector('video');
-    if (video) { video.currentTime -= 5; true; } else { false; }
-  `,
-  forward: `
-    const video = document.querySelector('video');
-    if (video) { video.currentTime += 5; true; } else { false; }
-  `
-};
 
 // 创建应用菜单
 function createMenu() {
@@ -319,7 +327,7 @@ function registerGlobalShortcuts() {
   globalShortcut.unregisterAll();
   
   if (shortcuts.toggleBrowser) {
-    globalShortcut.register(shortcuts.toggleBrowser, debouncedMinimizeOrRestore);
+    globalShortcut.register(shortcuts.toggleBrowser, debouncedToggleShortcut);
   }
   
   if (shortcuts.increaseOpacity) {
@@ -335,28 +343,48 @@ function registerShortcuts() {
   const shortcuts = store.get('shortcuts');
   globalShortcut.unregisterAll();
 
-  // 切换快捷键改为调用最小化/恢复功能
+  // 切换快捷键改为调用新的处理函数
   if (shortcuts.toggleBrowser) {
-    globalShortcut.register(shortcuts.toggleBrowser, debouncedMinimizeOrRestore);
+    globalShortcut.register(shortcuts.toggleBrowser, debouncedToggleShortcut);
   }
 
   // 仅当浏览器窗口可见且未最小化时，才注册媒体控制快捷键
   if (browserWindow && browserWindow.isVisible() && !browserWindow.isMinimized()) {
     const mediaActions = {
       playPause: `
-        const video = document.querySelector('video');
-        if (video) {
-          if (video.paused) video.play(); else video.pause();
-          true;
-        } else { false; }
+        (() => {
+          const playButton = document.querySelector('.bpx-player-ctrl-play');
+          if (playButton) {
+            playButton.click();
+            return true;
+          }
+          const video = document.querySelector('video');
+          if (video) {
+            if (video.paused) video.play(); else video.pause();
+            return true;
+          }
+          return false;
+        })()
       `,
       rewind: `
-        const video = document.querySelector('video');
-        if (video) { video.currentTime -= 5; true; } else { false; }
+        (() => {
+          const video = document.querySelector('.bpx-player-video-wrap video, video');
+          if (video) {
+            video.currentTime = Math.max(0, video.currentTime - 5);
+            return true;
+          }
+          return false;
+        })()
       `,
       forward: `
-        const video = document.querySelector('video');
-        if (video) { video.currentTime += 5; true; } else { false; }
+        (() => {
+          const video = document.querySelector('.bpx-player-video-wrap video, video');
+          if (video) {
+            video.currentTime += 5;
+            return true;
+          }
+          return false;
+        })()
       `
     };
 
@@ -396,6 +424,20 @@ ipcMain.on('update-shortcuts', (_, newShortcuts) => {
 
 ipcMain.on('toggle-browser', toggleBrowserVisibility);
 
+ipcMain.on('navigate-browser', (event, url) => {
+  if (browserWindow) {
+    browserWindow.loadURL(url);
+    store.set('lastUrl', url);
+    // 确保窗口可见
+    if (!browserWindow.isVisible()) browserWindow.show();
+    if (browserWindow.isMinimized()) browserWindow.restore();
+    browserWindow.focus();
+  } else {
+    // 如果窗口不存在，则创建并加载URL
+    createBrowserWindow(url);
+  }
+});
+
 ipcMain.on('adjust-opacity', (_, newOpacity) => {
   if (browserWindow) {
     store.set('browserOpacity', newOpacity);
@@ -403,15 +445,19 @@ ipcMain.on('adjust-opacity', (_, newOpacity) => {
   }
 });
 
-app.whenReady().then(() => {
-  createMainWindow();
-  
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+ipcMain.on('get-initial-settings', (event) => {
+  event.reply('initial-settings', {
+    shortcuts: store.get('shortcuts'),
+    opacity: store.get('browserOpacity'),
+    enableGpu: store.get('enableGpuAcceleration')
   });
 });
+
+ipcMain.on('set-gpu-acceleration', (event, enabled) => {
+  store.set('enableGpuAcceleration', enabled);
+});
+
+app.whenReady().then(createMainWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
