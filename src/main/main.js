@@ -116,6 +116,7 @@ function createBrowserWindow(url) {
     frame: true, // 改回带边框的窗口以确保稳定性
     transparent: false, // 禁用透明
     autoHideMenuBar: true, // 隐藏菜单栏 (文件, 视图等)
+    fullscreenable: false, // 禁止窗口进入OS全屏，以优化网页内视频的全屏体验
     alwaysOnTop: true, // 始终置顶
     show: false,
     webPreferences: {
@@ -126,6 +127,7 @@ function createBrowserWindow(url) {
 
   browserWindow.once('ready-to-show', () => {
     browserWindow.show();
+    registerShortcuts(); // 窗口就绪后立即注册快捷键
   });
   
   const urlToLoad = url || store.get('lastUrl');
@@ -249,50 +251,6 @@ function createMenu() {
       ]
     },
     {
-      label: '控制',
-      submenu: [
-        {
-          label: '播放/暂停',
-          accelerator: shortcuts.playPause,
-          click: () => {
-            if (browserWindow) {
-              browserWindow.webContents.executeJavaScript(mediaActions.playPause)
-                .then(result => {
-                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'playPause');
-                })
-                .catch(err => console.error('Failed to execute play/pause action:', err));
-            }
-          }
-        },
-        {
-          label: '后退',
-          accelerator: shortcuts.rewind,
-          click: () => {
-            if (browserWindow) {
-              browserWindow.webContents.executeJavaScript(mediaActions.rewind)
-                .then(result => {
-                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'rewind');
-                })
-                .catch(err => console.error('Failed to execute rewind action:', err));
-            }
-          }
-        },
-        {
-          label: '前进',
-          accelerator: shortcuts.forward,
-          click: () => {
-            if (browserWindow) {
-              browserWindow.webContents.executeJavaScript(mediaActions.forward)
-                .then(result => {
-                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'forward');
-                })
-                .catch(err => console.error('Failed to execute forward action:', err));
-            }
-          }
-        }
-      ]
-    },
-    {
       label: '设置',
       submenu: [
         {
@@ -343,6 +301,45 @@ function registerShortcuts() {
   const shortcuts = store.get('shortcuts');
   globalShortcut.unregisterAll();
 
+  // 始终定义媒体操作，以避免引用错误
+  const mediaActions = {
+    playPause: `
+      (() => {
+        const playButton = document.querySelector('.bpx-player-ctrl-play');
+        if (playButton) {
+          playButton.click();
+          return true;
+        }
+        const video = document.querySelector('video');
+        if (video) {
+          if (video.paused) video.play(); else video.pause();
+          return true;
+        }
+        return false;
+      })()
+    `,
+    rewind: `
+      (() => {
+        const video = document.querySelector('.bpx-player-video-wrap video, video');
+        if (video) {
+          video.currentTime = Math.max(0, video.currentTime - 5);
+          return true;
+        }
+        return false;
+      })()
+    `,
+    forward: `
+      (() => {
+        const video = document.querySelector('.bpx-player-video-wrap video, video');
+        if (video) {
+          video.currentTime += 5;
+          return true;
+        }
+        return false;
+      })()
+    `
+  };
+
   // 切换快捷键改为调用新的处理函数
   if (shortcuts.toggleBrowser) {
     globalShortcut.register(shortcuts.toggleBrowser, debouncedToggleShortcut);
@@ -350,44 +347,6 @@ function registerShortcuts() {
 
   // 仅当浏览器窗口可见且未最小化时，才注册媒体控制快捷键
   if (browserWindow && browserWindow.isVisible() && !browserWindow.isMinimized()) {
-    const mediaActions = {
-      playPause: `
-        (() => {
-          const playButton = document.querySelector('.bpx-player-ctrl-play');
-          if (playButton) {
-            playButton.click();
-            return true;
-          }
-          const video = document.querySelector('video');
-          if (video) {
-            if (video.paused) video.play(); else video.pause();
-            return true;
-          }
-          return false;
-        })()
-      `,
-      rewind: `
-        (() => {
-          const video = document.querySelector('.bpx-player-video-wrap video, video');
-          if (video) {
-            video.currentTime = Math.max(0, video.currentTime - 5);
-            return true;
-          }
-          return false;
-        })()
-      `,
-      forward: `
-        (() => {
-          const video = document.querySelector('.bpx-player-video-wrap video, video');
-          if (video) {
-            video.currentTime += 5;
-            return true;
-          }
-          return false;
-        })()
-      `
-    };
-
     Object.keys(mediaActions).forEach(action => {
       if (shortcuts[action]) {
         globalShortcut.register(shortcuts[action], () => {
