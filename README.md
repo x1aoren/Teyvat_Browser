@@ -24,7 +24,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/teyvat-browser.git
+git clone https://github.com/x1aoren/teyvat-browser.git
 
 # 进入目录
 cd teyvat-browser

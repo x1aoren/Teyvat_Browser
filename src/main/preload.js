@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   // 监听主进程消息
   receive: (channel, func) => {
-    const validChannels = ['browser-visibility-changed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate'];
+    const validChannels = ['browser-window-created', 'browser-window-closed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate'];
     if (validChannels.includes(channel)) {
       // 删除旧的事件监听器以避免重复
       ipcRenderer.removeAllListeners(channel);

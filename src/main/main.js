@@ -1,11 +1,25 @@
-const { app, BrowserWindow, BrowserView, ipcMain, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, screen } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+
+// 防抖工具函数
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 // 配置存储
 const store = new Store({
   defaults: {
-    windowBounds: { width: 1000, height: 800 },
+    mainWindowBounds: { width: 800, height: 600 },
+    browserWindowBounds: { width: 400, height: 300, x: 50, y: 50 },
     shortcuts: {
       toggleBrowser: 'Insert',
       playPause: 'Space',
@@ -15,143 +29,193 @@ const store = new Store({
       decreaseOpacity: 'Control+Down'
     },
     browserOpacity: 0.8,
-    browserVisible: false
   }
 });
 
-// 主窗口
+// 主窗口和播放器窗口
 let mainWindow = null;
-// 浏览器视图
-let browserView = null;
+let browserWindow = null;
 
-function createWindow() {
-  // 从配置中恢复窗口尺寸
-  const { width, height } = store.get('windowBounds');
+function createMainWindow() {
+  const { width, height } = store.get('mainWindowBounds');
 
   mainWindow = new BrowserWindow({
     width,
     height,
-    title: '提瓦特浏览器',
-    icon: path.join(__dirname, '../renderer/assets/icon.png'),
+    title: '提瓦特浏览器 - 控制台',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
 
-  // 加载主页面
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
-  // 窗口尺寸变化时存储配置
   mainWindow.on('resize', () => {
     const { width, height } = mainWindow.getBounds();
-    store.set('windowBounds', { width, height });
+    store.set('mainWindowBounds', { width, height });
   });
 
-  // 创建菜单
-  createMenu();
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // 主窗口关闭时，也关闭播放器窗口
+    if (browserWindow) {
+      browserWindow.close();
+    }
+  });
 
-  // 注册全局快捷键
-  registerShortcuts();
-  
-  // 创建浏览器视图
-  createBrowserView();
+  createMenu();
+  registerGlobalShortcuts();
 }
 
-// 创建浏览器视图
-function createBrowserView() {
-  if (mainWindow === null) return;
+// 创建播放器窗口
+function createBrowserWindow() {
+  if (browserWindow) {
+    browserWindow.focus();
+    return;
+  }
   
-  browserView = new BrowserView({
+  let { width, height, x, y } = store.get('browserWindowBounds');
+
+  // 验证窗口大小，避免为0
+  if (!width || !height) {
+    const defaultBounds = store.get('defaults.browserWindowBounds');
+    width = defaultBounds.width;
+    height = defaultBounds.height;
+  }
+  
+  // 检查窗口是否在屏幕内
+  const displays = screen.getAllDisplays();
+  const aDisplay = displays.find(d => {
+    return x >= d.bounds.x && y >= d.bounds.y &&
+           x + width <= d.bounds.x + d.bounds.width &&
+           y + height <= d.bounds.y + d.bounds.height;
+  });
+
+  if (!aDisplay) {
+    // 如果窗口不在任何一个屏幕内，重置到主屏幕的中央
+    const primaryDisplay = screen.getPrimaryDisplay();
+    x = primaryDisplay.bounds.x + (primaryDisplay.bounds.width - width) / 2;
+    y = primaryDisplay.bounds.y + (primaryDisplay.bounds.height - height) / 2;
+  }
+  
+  browserWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    title: '提瓦特浏览器',
+    frame: true, // 使用原生边框
+    transparent: false, // 禁用透明
+    alwaysOnTop: true, // 始终置顶
+    show: false,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+    }
+  });
+
+  browserWindow.loadURL('https://www.bilibili.com');
+  
+  browserWindow.once('ready-to-show', () => {
+    browserWindow.show();
+  });
+  
+  // 设置透明度
+  browserWindow.setOpacity(store.get('browserOpacity'));
+
+  browserWindow.on('resize', () => {
+    const { width, height } = browserWindow.getBounds();
+    store.set('browserWindowBounds', { ...store.get('browserWindowBounds'), width, height });
+  });
+
+  browserWindow.on('move', () => {
+    const { x, y } = browserWindow.getBounds();
+    store.set('browserWindowBounds', { ...store.get('browserWindowBounds'), x, y });
+  });
+
+  browserWindow.on('closed', () => {
+    browserWindow = null;
+    if (mainWindow) {
+      mainWindow.webContents.send('browser-window-closed');
     }
   });
   
-  mainWindow.setBrowserView(browserView);
-  
-  // 设置浏览器视图的初始大小和位置
-  const contentBounds = mainWindow.getContentBounds();
-  browserView.setBounds({
-    x: 0,
-    y: 80,
-    width: contentBounds.width,
-    height: contentBounds.height - 80
-  });
-  
-  // 设置浏览器视图的透明度
-  const opacity = store.get('browserOpacity');
-  browserView.webContents.executeJavaScript(`
-    document.documentElement.style.opacity = ${opacity};
-  `);
-  
-  // 加载B站
-  browserView.webContents.loadURL('https://www.bilibili.com');
-  
-  // 初始化隐藏浏览器视图
-  const isVisible = store.get('browserVisible');
-  toggleBrowserVisibility(isVisible);
-  
-  // 窗口大小变化时调整浏览器视图大小
-  mainWindow.on('resize', () => {
-    if (!browserView) return;
-    const contentBounds = mainWindow.getContentBounds();
-    browserView.setBounds({
-      x: 0,
-      y: 80,
-      width: contentBounds.width,
-      height: contentBounds.height - 80
-    });
-  });
-}
-
-// 切换浏览器视图的可见性
-function toggleBrowserVisibility(visible = null) {
-  if (!browserView) return;
-  
-  const newVisibility = visible !== null ? visible : !store.get('browserVisible');
-  store.set('browserVisible', newVisibility);
-  
-  if (newVisibility) {
-    browserView.webContents.executeJavaScript(`
-      document.documentElement.style.opacity = ${store.get('browserOpacity')};
-    `);
-  } else {
-    browserView.webContents.executeJavaScript(`
-      document.documentElement.style.opacity = 0;
-    `);
-  }
-  
-  // 通知渲染进程更新UI
   if (mainWindow) {
-    mainWindow.webContents.send('browser-visibility-changed', newVisibility);
+    mainWindow.webContents.send('browser-window-created');
+  }
+  
+  // 监听最小化和恢复事件，以动态更新快捷键
+  browserWindow.on('minimize', () => registerShortcuts());
+  browserWindow.on('restore', () => registerShortcuts());
+}
+
+function toggleBrowserVisibility() {
+  if (browserWindow) {
+    if (browserWindow.isVisible()) {
+      browserWindow.hide();
+      if (mainWindow) {
+        mainWindow.webContents.send('browser-window-closed');
+      }
+    } else {
+      browserWindow.show();
+      if (mainWindow) {
+        mainWindow.webContents.send('browser-window-created');
+      }
+    }
+    registerShortcuts(); // 切换可见性后重新注册快捷键
+  } else {
+    createBrowserWindow();
   }
 }
 
-// 调整浏览器视图的透明度
-function adjustBrowserOpacity(delta) {
-  if (!browserView) return;
-  
-  let opacity = store.get('browserOpacity');
-  opacity = Math.max(0.2, Math.min(1.0, opacity + delta));
-  store.set('browserOpacity', opacity);
-  
-  if (store.get('browserVisible')) {
-    browserView.webContents.executeJavaScript(`
-      document.documentElement.style.opacity = ${opacity};
-    `);
+// 最小化或恢复浏览器窗口
+function minimizeOrRestoreBrowserWindow() {
+  if (browserWindow && browserWindow.isVisible()) {
+    if (browserWindow.isMinimized()) {
+      browserWindow.restore();
+    } else {
+      browserWindow.minimize();
+    }
   }
+}
+const debouncedMinimizeOrRestore = debounce(minimizeOrRestoreBrowserWindow, 300);
+
+function adjustBrowserOpacity(delta) {
+  if (!browserWindow) return;
   
-  // 通知渲染进程更新UI
+  let opacity = browserWindow.getOpacity();
+  opacity = Math.max(0.2, Math.min(1.0, parseFloat((opacity + delta).toFixed(1))));
+  store.set('browserOpacity', opacity);
+  browserWindow.setOpacity(opacity);
+  
   if (mainWindow) {
     mainWindow.webContents.send('browser-opacity-changed', opacity);
   }
 }
 
+const mediaActions = {
+  playPause: `
+    const video = document.querySelector('video');
+    if (video) {
+      if (video.paused) video.play(); else video.pause();
+      true;
+    } else { false; }
+  `,
+  rewind: `
+    const video = document.querySelector('video');
+    if (video) { video.currentTime -= 5; true; } else { false; }
+  `,
+  forward: `
+    const video = document.querySelector('video');
+    if (video) { video.currentTime += 5; true; } else { false; }
+  `
+};
+
 // 创建应用菜单
 function createMenu() {
+  const shortcuts = store.get('shortcuts');
   const template = [
     {
       label: '文件',
@@ -167,21 +231,55 @@ function createMenu() {
       label: '视图',
       submenu: [
         {
-          label: '显示/隐藏浏览器',
+          label: '打开/关闭浏览器',
           click: () => { toggleBrowserVisibility(); }
         },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+      ]
+    },
+    {
+      label: '控制',
+      submenu: [
         {
-          label: '刷新',
-          accelerator: 'CmdOrCtrl+R',
-          click: (_, focusedWindow) => {
-            if (focusedWindow) focusedWindow.reload();
+          label: '播放/暂停',
+          accelerator: shortcuts.playPause,
+          click: () => {
+            if (browserWindow) {
+              browserWindow.webContents.executeJavaScript(mediaActions.playPause)
+                .then(result => {
+                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'playPause');
+                })
+                .catch(err => console.error('Failed to execute play/pause action:', err));
+            }
           }
         },
         {
-          label: '开发者工具',
-          accelerator: 'F12',
-          click: (_, focusedWindow) => {
-            if (focusedWindow) focusedWindow.webContents.toggleDevTools();
+          label: '后退',
+          accelerator: shortcuts.rewind,
+          click: () => {
+            if (browserWindow) {
+              browserWindow.webContents.executeJavaScript(mediaActions.rewind)
+                .then(result => {
+                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'rewind');
+                })
+                .catch(err => console.error('Failed to execute rewind action:', err));
+            }
+          }
+        },
+        {
+          label: '前进',
+          accelerator: shortcuts.forward,
+          click: () => {
+            if (browserWindow) {
+              browserWindow.webContents.executeJavaScript(mediaActions.forward)
+                .then(result => {
+                  if (result && mainWindow) mainWindow.webContents.send('shortcut-triggered', 'forward');
+                })
+                .catch(err => console.error('Failed to execute forward action:', err));
+            }
           }
         }
       ]
@@ -215,137 +313,112 @@ function createMenu() {
 }
 
 // 注册全局快捷键
-function registerShortcuts() {
+function registerGlobalShortcuts() {
   const shortcuts = store.get('shortcuts');
   
-  // 取消注册所有快捷键
   globalShortcut.unregisterAll();
   
-  // 注册显示/隐藏浏览器快捷键
   if (shortcuts.toggleBrowser) {
-    globalShortcut.register(shortcuts.toggleBrowser, () => {
-      toggleBrowserVisibility();
-    });
+    globalShortcut.register(shortcuts.toggleBrowser, debouncedMinimizeOrRestore);
   }
   
-  // 注册播放/暂停快捷键
-  if (shortcuts.playPause) {
-    globalShortcut.register(shortcuts.playPause, () => {
-      if (browserView && store.get('browserVisible')) {
-        browserView.webContents.executeJavaScript(`
-          (function() {
-            const video = document.querySelector('video');
-            if (video) {
-              if (video.paused) video.play();
-              else video.pause();
-              return true;
-            }
-            return false;
-          })();
-        `).then(result => {
-          if (result) {
-            mainWindow.webContents.send('shortcut-triggered', 'playPause');
-          }
-        });
-      }
-    });
-  }
-  
-  // 注册后退快捷键
-  if (shortcuts.rewind) {
-    globalShortcut.register(shortcuts.rewind, () => {
-      if (browserView && store.get('browserVisible')) {
-        browserView.webContents.executeJavaScript(`
-          (function() {
-            const video = document.querySelector('video');
-            if (video) {
-              video.currentTime = Math.max(0, video.currentTime - 5);
-              return true;
-            }
-            return false;
-          })();
-        `).then(result => {
-          if (result) {
-            mainWindow.webContents.send('shortcut-triggered', 'rewind');
-          }
-        });
-      }
-    });
-  }
-  
-  // 注册前进快捷键
-  if (shortcuts.forward) {
-    globalShortcut.register(shortcuts.forward, () => {
-      if (browserView && store.get('browserVisible')) {
-        browserView.webContents.executeJavaScript(`
-          (function() {
-            const video = document.querySelector('video');
-            if (video) {
-              video.currentTime += 5;
-              return true;
-            }
-            return false;
-          })();
-        `).then(result => {
-          if (result) {
-            mainWindow.webContents.send('shortcut-triggered', 'forward');
-          }
-        });
-      }
-    });
-  }
-  
-  // 注册增加透明度快捷键
   if (shortcuts.increaseOpacity) {
-    globalShortcut.register(shortcuts.increaseOpacity, () => {
-      adjustBrowserOpacity(0.1);
-      mainWindow.webContents.send('shortcut-triggered', 'increaseOpacity');
-    });
+    globalShortcut.register(shortcuts.increaseOpacity, () => adjustBrowserOpacity(0.1));
   }
   
-  // 注册减少透明度快捷键
   if (shortcuts.decreaseOpacity) {
-    globalShortcut.register(shortcuts.decreaseOpacity, () => {
-      adjustBrowserOpacity(-0.1);
-      mainWindow.webContents.send('shortcut-triggered', 'decreaseOpacity');
-    });
+    globalShortcut.register(shortcuts.decreaseOpacity, () => adjustBrowserOpacity(-0.1));
   }
 }
 
-// 监听快捷键更新事件
+function registerShortcuts() {
+  const shortcuts = store.get('shortcuts');
+  globalShortcut.unregisterAll();
+
+  // 切换快捷键改为调用最小化/恢复功能
+  if (shortcuts.toggleBrowser) {
+    globalShortcut.register(shortcuts.toggleBrowser, debouncedMinimizeOrRestore);
+  }
+
+  // 仅当浏览器窗口可见且未最小化时，才注册媒体控制快捷键
+  if (browserWindow && browserWindow.isVisible() && !browserWindow.isMinimized()) {
+    const mediaActions = {
+      playPause: `
+        const video = document.querySelector('video');
+        if (video) {
+          if (video.paused) video.play(); else video.pause();
+          true;
+        } else { false; }
+      `,
+      rewind: `
+        const video = document.querySelector('video');
+        if (video) { video.currentTime -= 5; true; } else { false; }
+      `,
+      forward: `
+        const video = document.querySelector('video');
+        if (video) { video.currentTime += 5; true; } else { false; }
+      `
+    };
+
+    Object.keys(mediaActions).forEach(action => {
+      if (shortcuts[action]) {
+        globalShortcut.register(shortcuts[action], () => {
+          if (browserWindow) {
+            browserWindow.webContents.executeJavaScript(mediaActions[action])
+              .then(result => {
+                if (result && mainWindow) {
+                  mainWindow.webContents.send('shortcut-triggered', action);
+                }
+              })
+              .catch(err => {
+                console.error(`快捷键脚本执行失败 (${action}):`, err.message);
+              });
+          }
+        });
+      }
+    });
+
+    if (shortcuts.increaseOpacity) {
+      globalShortcut.register(shortcuts.increaseOpacity, () => adjustBrowserOpacity(0.1));
+    }
+    
+    if (shortcuts.decreaseOpacity) {
+      globalShortcut.register(shortcuts.decreaseOpacity, () => adjustBrowserOpacity(-0.1));
+    }
+  }
+}
+
 ipcMain.on('update-shortcuts', (_, newShortcuts) => {
   store.set('shortcuts', newShortcuts);
-  registerShortcuts();
+  registerGlobalShortcuts();
+  createMenu();
 });
 
-// 监听浏览器视图切换事件
-ipcMain.on('toggle-browser', () => {
-  toggleBrowserVisibility();
+ipcMain.on('toggle-browser', toggleBrowserVisibility);
+
+ipcMain.on('adjust-opacity', (_, newOpacity) => {
+  if (browserWindow) {
+    store.set('browserOpacity', newOpacity);
+    browserWindow.setOpacity(newOpacity);
+  }
 });
 
-// 监听调整透明度事件
-ipcMain.on('adjust-opacity', (_, delta) => {
-  adjustBrowserOpacity(delta);
+app.whenReady().then(() => {
+  createMainWindow();
+  
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow();
+    }
+  });
 });
 
-// 应用准备就绪时创建窗口
-app.whenReady().then(createWindow);
-
-// 所有窗口关闭时退出应用（macOS除外）
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// 应用激活且没有窗口时，创建窗口（macOS）
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
-});
-
-// 应用退出前取消注册所有快捷键
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 }); 

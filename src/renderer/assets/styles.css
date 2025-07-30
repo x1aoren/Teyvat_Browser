@@ -80,8 +80,7 @@ body {
 }
 
 .btn-icon {
-  height: 20px;
-  margin-right: 5px;
+  display: none; /* 隐藏图标 */
 }
 
 /* 快捷键状态区域 */
@@ -123,8 +122,6 @@ body {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
-  background-image: url('./bg-pattern.png');
-  background-size: 200px;
   position: relative;
 }
 
@@ -150,24 +147,11 @@ body {
 /* 主页内容 */
 .home-content {
   display: flex;
+  flex-direction: column;
   height: 100%;
   align-items: center;
   justify-content: center;
-  position: relative;
-  flex-direction: column;
   text-align: center;
-}
-
-.character-silhouette {
-  background-image: url('./character.png');
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  width: 300px;
-  height: 400px;
-  opacity: 0.7;
-  position: absolute;
-  z-index: -1;
 }
 
 .welcome-text {
@@ -395,4 +379,22 @@ kbd {
   margin-top: 20px;
   color: #666;
   font-size: 0.9em;
+}
+
+.home-controls {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.control-btn.large {
+  padding: 0.8rem 1.8rem;
+  font-size: 1.1rem;
+  border-radius: 8px;
+  background-color: var(--primary-color);
+  color: var(--light-color);
+  border-color: var(--accent-color);
+}
+
+.control-btn.large:hover {
+  background-color: #2980b9;
 }

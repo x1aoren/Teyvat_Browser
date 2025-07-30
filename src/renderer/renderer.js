@@ -4,6 +4,7 @@
 let currentView = 'homeView';
 
 // DOM元素
+const homeBtn = document.getElementById('homeBtn');
 const toggleBrowserBtn = document.getElementById('toggleBrowserBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const aboutBtn = document.getElementById('aboutBtn');
@@ -57,6 +58,10 @@ function setupEventListeners() {
   });
   
   // 导航按钮
+  homeBtn.addEventListener('click', () => {
+    showView('homeView');
+  });
+  
   settingsBtn.addEventListener('click', () => {
     showView('settingsView');
   });
@@ -80,15 +85,21 @@ function setupEventListeners() {
   opacitySlider.addEventListener('input', () => {
     const newOpacity = parseFloat(opacitySlider.value);
     opacityValue.textContent = newOpacity.toFixed(1);
-    window.electron.send('adjust-opacity', newOpacity - parseFloat(opacityValue.textContent));
+    window.electron.send('adjust-opacity', newOpacity);
   });
   
   decreaseOpacityBtn.addEventListener('click', () => {
-    window.electron.send('adjust-opacity', -0.1);
+    let newOpacity = parseFloat(opacitySlider.value) - 0.1;
+    newOpacity = Math.max(0.2, newOpacity);
+    opacitySlider.value = newOpacity;
+    opacitySlider.dispatchEvent(new Event('input'));
   });
   
   increaseOpacityBtn.addEventListener('click', () => {
-    window.electron.send('adjust-opacity', 0.1);
+    let newOpacity = parseFloat(opacitySlider.value) + 0.1;
+    newOpacity = Math.min(1.0, newOpacity);
+    opacitySlider.value = newOpacity;
+    opacitySlider.dispatchEvent(new Event('input'));
   });
   
   // 快捷键设置按钮
@@ -101,8 +112,12 @@ function setupEventListeners() {
   });
   
   // 主进程消息监听
-  window.electron.receive('browser-visibility-changed', (visible) => {
-    updateBrowserButtonState(visible);
+  window.electron.receive('browser-window-closed', () => {
+    updateBrowserButtonState(false);
+  });
+  
+  window.electron.receive('browser-window-created', () => {
+    updateBrowserButtonState(true);
   });
   
   window.electron.receive('browser-opacity-changed', (opacity) => {
@@ -145,8 +160,15 @@ function startListeningForShortcut(button) {
   button.textContent = '按下新快捷键...';
   
   // 键盘监听函数
-  const keyHandler = (e) => {
+  const keydownListener = (e) => {
+    // 阻止默认行为，例如按下空格键滚动页面
     e.preventDefault();
+
+    // 忽略单独的修饰键事件
+    const key = e.code;
+    if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(key)) {
+      return;
+    }
     
     // 构建快捷键字符串
     const modifiers = [];
@@ -154,22 +176,26 @@ function startListeningForShortcut(button) {
     if (e.shiftKey) modifiers.push('Shift');
     if (e.altKey) modifiers.push('Alt');
     if (e.metaKey) modifiers.push('Meta');
-    
-    let keyName = e.code;
-    // 特殊键名处理
+
+    // 格式化按键码
+    let keyName = key.replace('Key', '').replace('Digit', '');
     if (keyName === 'Space') keyName = 'Space';
     else if (keyName === 'ArrowLeft') keyName = 'Left';
     else if (keyName === 'ArrowRight') keyName = 'Right';
     else if (keyName === 'ArrowUp') keyName = 'Up';
     else if (keyName === 'ArrowDown') keyName = 'Down';
-    else if (keyName.startsWith('Key')) keyName = keyName.replace('Key', '');
-    else if (keyName.startsWith('Digit')) keyName = keyName.replace('Digit', '');
+    else if (keyName === 'Insert' || keyName === 'Delete' || keyName === 'Home' || keyName === 'End' || keyName === 'PageUp' || keyName === 'PageDown') {
+      // 保持原样
+    } else if (keyName.length === 1 && (keyName < 'A' || keyName > 'Z')) {
+      // 对非字母键做额外处理，如果需要
+    }
     
     const shortcutString = [...modifiers, keyName].join('+');
     
     // 检查快捷键冲突
     if (checkShortcutConflict(shortcutString, actionName)) {
       alert('此快捷键已被占用，请选择其他组合！');
+      button.textContent = shortcuts[actionName] || '设置'; // 恢复按钮文本
     } else {
       // 设置新快捷键
       shortcuts[actionName] = shortcutString;
@@ -180,37 +206,43 @@ function startListeningForShortcut(button) {
     }
     
     // 停止监听
-    stopListeningForShortcut();
+    stopListeningForShortcut(keydownListener);
     
     // 更新快捷键显示
     updateShortcutDisplay();
   };
   
-  // 监听一次按键
-  window.addEventListener('keydown', keyHandler, { once: true });
+  // 监听按键
+  window.addEventListener('keydown', keydownListener);
   
   // 点击其他位置取消监听
   const cancelHandler = (e) => {
     if (e.target !== button) {
-      stopListeningForShortcut();
-      window.removeEventListener('keydown', keyHandler);
+      stopListeningForShortcut(keydownListener);
+      button.textContent = shortcuts[button.dataset.action] || '设置';
     }
   };
   
-  window.addEventListener('click', cancelHandler);
+  window.addEventListener('click', cancelHandler, { once: true });
   
   // 存储取消函数以便清理
   button._cancelHandler = cancelHandler;
+  button._keydownListener = keydownListener;
 }
 
 // 停止监听快捷键
 function stopListeningForShortcut() {
   if (!listeningForShortcut || !currentShortcutButton) return;
   
-  currentShortcutButton.classList.remove('listening');
-  window.removeEventListener('click', currentShortcutButton._cancelHandler);
-  currentShortcutButton._cancelHandler = null;
+  if (currentShortcutButton._keydownListener) {
+    window.removeEventListener('keydown', currentShortcutButton._keydownListener);
+  }
   
+  currentShortcutButton.classList.remove('listening');
+  if (currentShortcutButton._cancelHandler) {
+    window.removeEventListener('click', currentShortcutButton._cancelHandler);
+  }
+
   listeningForShortcut = false;
   currentShortcutButton = null;
 }
@@ -253,12 +285,9 @@ function updateShortcutDisplay() {
 }
 
 // 更新浏览器按钮状态
-function updateBrowserButtonState(visible) {
-  if (visible) {
-    toggleBrowserBtn.classList.add('active');
-  } else {
-    toggleBrowserBtn.classList.remove('active');
-  }
+function updateBrowserButtonState(isOpen) {
+  toggleBrowserBtn.classList.toggle('active', isOpen);
+  toggleBrowserBtn.textContent = isOpen ? '关闭浏览器' : '打开浏览器';
 }
 
 // 突出显示触发的快捷键动作
@@ -282,5 +311,11 @@ function highlightShortcutAction(action) {
   }
 }
 
-// 初始化应用
-document.addEventListener('DOMContentLoaded', init); 
+// 初始化时请求一次初始状态
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  // 注意：由于无法直接从渲染进程知道播放器窗口是否已打开，
+  // 我们依赖主进程在窗口关闭时发送的消息来更新状态。
+  // 启动时，我们假定窗口是关闭的。
+  updateBrowserButtonState(false);
+}); 

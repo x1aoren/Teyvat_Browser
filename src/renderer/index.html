@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>提瓦特浏览器</title>
-  <link rel="stylesheet" href="./assets/styles.css">
+  <title>提瓦特浏览器 - 控制台</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script>
+    window.addEventListener('error', (event) => {
+      console.error('页面错误:', event.error);
+      alert('发生错误: ' + event.error.message);
+    });
+  </script>
   <script src="./assets/icon-placeholder.js"></script>
 </head>
 <body>
@@ -16,16 +22,13 @@
         <h1 class="app-title">提瓦特浏览器</h1>
       </div>
       <div class="header-controls">
-        <button id="toggleBrowserBtn" class="control-btn">
-          <img src="./assets/icons/browser.png" alt="浏览器" class="btn-icon">
-          <span class="btn-text">浏览器</span>
+        <button id="homeBtn" class="control-btn">
+          <span class="btn-text">主页</span>
         </button>
         <button id="settingsBtn" class="control-btn">
-          <img src="./assets/icons/settings.png" alt="设置" class="btn-icon">
           <span class="btn-text">设置</span>
         </button>
         <button id="aboutBtn" class="control-btn">
-          <img src="./assets/icons/about.png" alt="关于" class="btn-icon">
           <span class="btn-text">关于</span>
         </button>
       </div>
@@ -62,10 +65,12 @@
       <!-- 初始提示 -->
       <div id="homeView" class="view active">
         <div class="home-content">
-          <div class="character-silhouette"></div>
           <div class="welcome-text">
             <h2>欢迎使用提瓦特浏览器</h2>
-            <p>按下 <kbd>Insert</kbd> 或点击上方"浏览器"按钮开始探索世界</p>
+            <p>点击下方按钮，开始您的浏览体验</p>
+          </div>
+          <div class="home-controls">
+            <button id="toggleBrowserBtn" class="control-btn large">打开浏览器</button>
           </div>
         </div>
       </div>
@@ -127,7 +132,7 @@
           <div class="about-info">
             <p class="app-version">版本: 1.0.0</p>
             <p>提瓦特浏览器是一款基于Electron的B站视频播放控制工具</p>
-            <p>开发者: Teyvat Developer</p>
+            <p>开发者: 原神代肝_小任</p>
             <p class="copyright">本软件中原神相关元素版权归米哈游所有</p>
             <p>"原神"是米哈游的注册商标</p>
           </div>

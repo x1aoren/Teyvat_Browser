@@ -13,11 +13,11 @@
   "license": "ISC",
   "description": "一个原神风格的B站视频浏览器",
   "dependencies": {
-    "electron": "^37.2.4",
-    "electron-store": "^10.1.0"
+    "electron": "^27.0.0",
+    "electron-store": "^7.0.3"
   },
   "devDependencies": {
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.6.4"
   },
   "build": {
     "appId": "com.teyvat.browser",
