@@ -58,7 +58,7 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.removeMenu(); // 移除菜单栏
+  mainWindow.removeMenu(); // 彻底移除菜单栏，包括Electron默认的菜单
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
@@ -75,7 +75,6 @@ function createMainWindow() {
     }
   });
 
-  createMenu();
   registerGlobalShortcuts();
 }
 
@@ -227,61 +226,6 @@ function adjustBrowserOpacity(delta) {
   }
 }
 
-// 创建应用菜单
-function createMenu() {
-  const shortcuts = store.get('shortcuts');
-  const template = [
-    {
-      label: '文件',
-      submenu: [
-        {
-          label: '退出',
-          accelerator: 'CmdOrCtrl+Q',
-          click: () => { app.quit(); }
-        }
-      ]
-    },
-    {
-      label: '视图',
-      submenu: [
-        {
-          label: '打开/关闭浏览器',
-          click: () => { toggleBrowserVisibility(); }
-        },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-      ]
-    },
-    {
-      label: '设置',
-      submenu: [
-        {
-          label: '快捷键设置',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('navigate', 'settings');
-          }
-        }
-      ]
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '关于',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('navigate', 'about');
-          }
-        }
-      ]
-    }
-  ];
-  
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-}
-
 // 注册全局快捷键
 function registerGlobalShortcuts() {
   const shortcuts = store.get('shortcuts');
@@ -382,7 +326,6 @@ function registerShortcuts() {
 ipcMain.on('update-shortcuts', (_, newShortcuts) => {
   store.set('shortcuts', newShortcuts);
   registerGlobalShortcuts();
-  createMenu();
 });
 
 ipcMain.on('toggle-browser', toggleBrowserVisibility);
