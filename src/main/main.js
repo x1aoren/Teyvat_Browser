@@ -92,72 +92,124 @@ function executeMediaAction(action) {
     return;
   }
 
-  // 确保浏览器窗口可见并获得焦点
-  if (!browserWindow.isVisible()) {
-    browserWindow.show();
+  // 检查浏览器窗口是否有效
+  if (browserWindow.isDestroyed()) {
+    console.log('Browser window is destroyed');
+    return;
   }
-  if (browserWindow.isMinimized()) {
-    browserWindow.restore();
+
+  // 确保浏览器窗口可见并获得焦点
+  try {
+    if (!browserWindow.isVisible()) {
+      browserWindow.show();
+    }
+    if (browserWindow.isMinimized()) {
+      browserWindow.restore();
+    }
+  } catch (err) {
+    console.error('Failed to manage browser window:', err);
+    return;
   }
 
   // 向浏览器窗口发送媒体控制指令
   switch (action) {
     case 'playPause':
-      browserWindow.webContents.executeJavaScript(`
-        // 尝试查找B站播放器的播放/暂停按钮
-        const bilibiliPlayBtn = document.querySelector('.bpx-player-ctrl-play, .bilibili-player-video-btn-start');
-        if (bilibiliPlayBtn) {
-          bilibiliPlayBtn.click();
-          console.log('B站播放器: 播放/暂停');
-        } else {
-          // 通用视频元素控制
-          const videos = document.querySelectorAll('video');
-          if (videos.length > 0) {
-            const video = videos[0];
-            if (video.paused) {
-              video.play();
-              console.log('通用视频: 播放');
+      executeMediaScript(`
+        (function() {
+          try {
+            // 尝试查找B站播放器的播放/暂停按钮
+            const bilibiliPlayBtn = document.querySelector('.bpx-player-ctrl-play, .bilibili-player-video-btn-start');
+            if (bilibiliPlayBtn) {
+              bilibiliPlayBtn.click();
+              return 'B站播放器: 播放/暂停';
             } else {
-              video.pause();
-              console.log('通用视频: 暂停');
+              // 通用视频元素控制
+              const videos = document.querySelectorAll('video');
+              if (videos.length > 0) {
+                const video = videos[0];
+                if (video.paused) {
+                  video.play();
+                  return '通用视频: 播放';
+                } else {
+                  video.pause();
+                  return '通用视频: 暂停';
+                }
+              } else {
+                return '未找到可控制的媒体元素';
+              }
             }
-          } else {
-            console.log('未找到可控制的媒体元素');
+          } catch (e) {
+            return 'Error: ' + e.message;
           }
-        }
-      `).catch(err => console.error('媒体控制失败:', err));
+        })();
+      `, action);
       break;
 
     case 'rewind':
-      browserWindow.webContents.executeJavaScript(`
-        // 尝试查找B站播放器
-        const videos = document.querySelectorAll('video');
-        if (videos.length > 0) {
-          const video = videos[0];
-          video.currentTime = Math.max(0, video.currentTime - 5);
-          console.log('视频后退5秒');
-        } else {
-          console.log('未找到视频元素');
-        }
-      `).catch(err => console.error('媒体控制失败:', err));
+      executeMediaScript(`
+        (function() {
+          try {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+              const video = videos[0];
+              video.currentTime = Math.max(0, video.currentTime - 5);
+              return '视频后退5秒';
+            } else {
+              return '未找到视频元素';
+            }
+          } catch (e) {
+            return 'Error: ' + e.message;
+          }
+        })();
+      `, action);
       break;
 
     case 'forward':
-      browserWindow.webContents.executeJavaScript(`
-        const videos = document.querySelectorAll('video');
-        if (videos.length > 0) {
-          const video = videos[0];
-          video.currentTime = Math.min(video.duration || video.currentTime + 5, video.currentTime + 5);
-          console.log('视频快进5秒');
-        } else {
-          console.log('未找到视频元素');
-        }
-      `).catch(err => console.error('媒体控制失败:', err));
+      executeMediaScript(`
+        (function() {
+          try {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+              const video = videos[0];
+              video.currentTime = Math.min(video.duration || video.currentTime + 5, video.currentTime + 5);
+              return '视频快进5秒';
+            } else {
+              return '未找到视频元素';
+            }
+          } catch (e) {
+            return 'Error: ' + e.message;
+          }
+        })();
+      `, action);
       break;
 
     default:
       console.log('Unknown media action:', action);
   }
+}
+
+// 安全执行媒体脚本的辅助函数
+function executeMediaScript(script, action) {
+  if (!browserWindow || browserWindow.isDestroyed()) {
+    console.log('Browser window unavailable for', action);
+    return;
+  }
+
+  browserWindow.webContents.executeJavaScript(script)
+    .then(result => {
+      console.log('Media action result:', result);
+    })
+    .catch(err => {
+      console.error(`媒体控制失败 (${action}):`, err.message);
+      // 尝试重新获得窗口焦点
+      try {
+        if (browserWindow && !browserWindow.isDestroyed()) {
+          browserWindow.focus();
+        }
+      } catch (focusErr) {
+        console.error('Failed to focus browser window:', focusErr.message);
+      }
+    });
 }
 
 // 初始化C++快捷键模块
