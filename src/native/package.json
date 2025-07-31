@@ -1,6 +1,6 @@
 {
   "name": "high-priority-shortcut",
-  "version": "1.0.0",
+  "version": "a1.0",
   "description": "A high priority global shortcut module for Electron app",
   "main": "lib/binding.js",
   "scripts": {

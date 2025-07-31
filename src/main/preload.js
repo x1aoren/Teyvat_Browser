@@ -21,6 +21,6 @@ contextBridge.exposeInMainWorld('electron', {
   },
   // 获取版本信息
   getAppVersion: () => {
-    return process.env.npm_package_version || '1.0.0';
+    return process.env.npm_package_version || 'alpha1.0';
   }
 }); 

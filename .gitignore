@@ -44,4 +44,33 @@ coverage/
 .env
 .DS_Store
 *.pem
-*.key 
+*.key
+
+# Native module build files
+src/native/build/
+src/native/node_modules/
+*.node
+
+# npm cache and temp files
+.npm/
+.eslintcache
+
+# Windows specific
+*.exe
+*.msi
+
+# Editor backup files
+*~
+#*#
+.#*
+
+# Temporary startup scripts (if any)
+start-*.bat
+start-*.ps1
+
+# Debug and crash files
+*.dmp
+crash.log
+
+# Local configuration
+config.local.json 

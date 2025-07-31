@@ -14,10 +14,89 @@ std::thread mouseHookThread;
 DWORD hotkeyThreadId = 0;
 bool isRunning = false;
 bool mouseHookRunning = false;
+bool keyboardHookRunning = false;
 Napi::ThreadSafeFunction tsfn;
 std::map<int, std::string> idToActionMap;
 std::map<std::pair<UINT, UINT>, std::string> mouseKeyMap; // (modifiers, mouseButton) -> action
+std::map<std::pair<UINT, UINT>, std::string> keyboardHookMap; // (modifiers, vkCode) -> action
 HHOOK mouseHook = NULL;
+HHOOK keyboardHook = NULL;
+
+// Track modifier key states
+bool isShiftPressed = false;
+bool isCtrlPressed = false;
+bool isAltPressed = false;
+bool isWinPressed = false;
+
+// GAME-COMPATIBLE KEYBOARD HOOK - BASED ON CSDN RESEARCH!
+LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    // CRITICAL: Always process HC_ACTION, ignore nCode < 0 (as per CSDN article)
+    if (nCode == HC_ACTION && keyboardHookRunning) {
+        KBDLLHOOKSTRUCT* pKeyboard = (KBDLLHOOKSTRUCT*)lParam;
+        DWORD vkCode = pKeyboard->vkCode;
+        bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+        bool isKeyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+        
+        // GAME COMPATIBILITY: Ignore injected events to prevent infinite loops
+        if (pKeyboard->flags & LLKHF_INJECTED) {
+            return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
+        }
+        
+        // Track modifier key states with ULTRA precision
+        if (isKeyDown || isKeyUp) {
+            bool pressed = isKeyDown;
+            switch (vkCode) {
+                case VK_LSHIFT:
+                case VK_RSHIFT:
+                    isShiftPressed = pressed;
+                    break;
+                case VK_LCONTROL:
+                case VK_RCONTROL:
+                    isCtrlPressed = pressed;
+                    break;
+                case VK_LMENU:
+                case VK_RMENU:
+                    isAltPressed = pressed;
+                    break;
+                case VK_LWIN:
+                case VK_RWIN:
+                    isWinPressed = pressed;
+                    break;
+            }
+        }
+        
+        // GAME MODE: Only process key down events for shortcuts
+        if (isKeyDown) {
+            // Build current modifier mask with HIGH precision
+            UINT modifiers = 0;
+            if (isShiftPressed) modifiers |= MOD_SHIFT;
+            if (isCtrlPressed) modifiers |= MOD_CONTROL;
+            if (isAltPressed) modifiers |= MOD_ALT;
+            if (isWinPressed) modifiers |= MOD_WIN;
+            
+            // Check if this key combination is registered
+            auto key = std::make_pair(modifiers, vkCode);
+            auto it = keyboardHookMap.find(key);
+            if (it != keyboardHookMap.end()) {
+                std::string action = it->second;
+                
+                // ULTRA-FAST callback execution for games
+                if (tsfn) {
+                    tsfn.NonBlockingCall([action](Napi::Env env, Napi::Function jsCallback) {
+                        jsCallback.Call({Napi::String::New(env, action)});
+                    });
+                }
+                
+                // GAME COMPATIBILITY: Always consume registered shortcuts
+                // This prevents games from receiving our hotkeys
+                return 1;
+            }
+        }
+    }
+    
+    // CRITICAL: Always call next hook for system stability
+    return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
+}
 
 // Mouse hook procedure
 LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -29,12 +108,12 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (xButton == XBUTTON1) mouseButton = 1; // Mouse side button 1
             else if (xButton == XBUTTON2) mouseButton = 2; // Mouse side button 2
             
-            // Get current modifier key states
+            // Get current modifier key states from our tracking
             UINT modifiers = 0;
-            if (GetAsyncKeyState(VK_CONTROL) & 0x8000) modifiers |= MOD_CONTROL;
-            if (GetAsyncKeyState(VK_SHIFT) & 0x8000) modifiers |= MOD_SHIFT;
-            if (GetAsyncKeyState(VK_MENU) & 0x8000) modifiers |= MOD_ALT;
-            if (GetAsyncKeyState(VK_LWIN) & 0x8000 || GetAsyncKeyState(VK_RWIN) & 0x8000) modifiers |= MOD_WIN;
+            if (isShiftPressed) modifiers |= MOD_SHIFT;
+            if (isCtrlPressed) modifiers |= MOD_CONTROL;
+            if (isAltPressed) modifiers |= MOD_ALT;
+            if (isWinPressed) modifiers |= MOD_WIN;
             
             auto key = std::make_pair(modifiers, mouseButton);
             auto it = mouseKeyMap.find(key);
@@ -54,6 +133,13 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // Stop hotkey listener
 void StopHotkeyListener() {
+    // Stop keyboard hook - THE ULTIMATE STOPPER!
+    if (keyboardHook) {
+        UnhookWindowsHookEx(keyboardHook);
+        keyboardHook = NULL;
+        keyboardHookRunning = false;
+    }
+    
     // Stop mouse hook
     if (mouseHook) {
         UnhookWindowsHookEx(mouseHook);
@@ -61,7 +147,7 @@ void StopHotkeyListener() {
         mouseHookRunning = false;
     }
     
-    // Stop hotkey listening
+    // Stop legacy hotkey listening (kept as backup)
     if (isRunning && hotkeyThreadId != 0) {
         PostThreadMessage(hotkeyThreadId, WM_QUIT, 0, 0);
         if (hotkeyThread.joinable()) {
@@ -71,6 +157,12 @@ void StopHotkeyListener() {
         isRunning = false;
     }
     
+    // Reset modifier key states
+    isShiftPressed = false;
+    isCtrlPressed = false;
+    isAltPressed = false;
+    isWinPressed = false;
+    
     // Clean up resources
     if (tsfn) {
         tsfn.Release();
@@ -78,6 +170,7 @@ void StopHotkeyListener() {
     }
     
     mouseKeyMap.clear();
+    keyboardHookMap.clear();
 }
 
 // Enhanced function to convert string to virtual key code and modifiers
@@ -244,9 +337,19 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
                 // Mouse side button mapping
                 mouseKeyMap[std::make_pair(modifiers, mouseButton)] = actionName;
             } else if (vkCode != 0) {
-                // Regular keyboard shortcuts
+                // Use THE ULTIMATE KEYBOARD HOOK instead of RegisterHotKey
+                keyboardHookMap[std::make_pair(modifiers, vkCode)] = actionName;
+                // Keep legacy method as backup
                 hotkeysToRegister.push_back({actionName, modifiers, vkCode});
             }
+        }
+    }
+
+    // Install THE ULTIMATE KEYBOARD HOOK - Works in fullscreen games!
+    if (!keyboardHookMap.empty()) {
+        keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(NULL), 0);
+        if (keyboardHook) {
+            keyboardHookRunning = true;
         }
     }
 
@@ -258,8 +361,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
         }
     }
 
-    // Start keyboard shortcut listening thread
-    if (!hotkeysToRegister.empty()) {
+    // Keep legacy RegisterHotKey as backup (in case hooks fail in some scenarios)
+    if (!hotkeysToRegister.empty() && !keyboardHookRunning) {
         isRunning = true;
         hotkeyThread = std::thread([hotkeysToRegister]() {
             hotkeyThreadId = GetCurrentThreadId();
