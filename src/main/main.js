@@ -2,6 +2,21 @@ const { app, BrowserWindow, ipcMain, Menu, globalShortcut, screen, shell } = req
 const path = require('path');
 const Store = require('electron-store');
 
+// 尝试加载C++模块
+let highPriorityShortcut = null;
+try {
+  highPriorityShortcut = require('../native/lib/binding.js');
+  console.log('Successfully loaded high-priority shortcut module');
+} catch (err) {
+  console.log('Failed to load high-priority shortcut module:', err);
+  // 提供一个后备实现，避免破坏应用功能
+  highPriorityShortcut = {
+    installHook: () => { console.warn('C++ shortcuts not available, using fallback'); },
+    registerShortcuts: () => { console.warn('C++ shortcuts not available'); },
+    uninstallHook: () => { console.warn('C++ shortcuts not available'); }
+  };
+}
+
 // 防抖工具函数
 function debounce(func, wait) {
   let timeout;
@@ -27,7 +42,10 @@ const store = new Store({
       rewind: 'Shift+F2',
       forward: 'Shift+F3',
       increaseOpacity: 'Control+Up',
-      decreaseOpacity: 'Control+Down'
+      decreaseOpacity: 'Control+Down',
+      // 鼠标侧键示例（可选，用户可自定义）
+      // mouseSide1Action: 'XButton1',  // 鼠标侧键1
+      // mouseSide2Action: 'Shift+XButton2',  // Shift+鼠标侧键2
     },
     browserOpacity: 0.8,
     enableGpuAcceleration: false
@@ -42,6 +60,144 @@ if (!store.get('enableGpuAcceleration')) {
 // 主窗口和播放器窗口
 let mainWindow = null;
 let browserWindow = null;
+
+// 快捷键处理函数
+function handleShortcut(action) {
+  console.log('Shortcut triggered:', action);
+  
+  switch (action) {
+    case 'toggleBrowser':
+      toggleBrowserVisibility();
+      break;
+    case 'playPause':
+    case 'rewind':
+    case 'forward':
+      executeMediaAction(action);
+      break;
+    case 'increaseOpacity':
+      adjustBrowserOpacity(0.1);
+      break;
+    case 'decreaseOpacity':
+      adjustBrowserOpacity(-0.1);
+      break;
+    default:
+      console.log('Unknown shortcut action:', action);
+  }
+}
+
+// 执行媒体操作
+function executeMediaAction(action) {
+  if (!browserWindow) {
+    console.log('Browser window not available for media action:', action);
+    return;
+  }
+
+  // 确保浏览器窗口可见并获得焦点
+  if (!browserWindow.isVisible()) {
+    browserWindow.show();
+  }
+  if (browserWindow.isMinimized()) {
+    browserWindow.restore();
+  }
+
+  // 向浏览器窗口发送媒体控制指令
+  switch (action) {
+    case 'playPause':
+      browserWindow.webContents.executeJavaScript(`
+        // 尝试查找B站播放器的播放/暂停按钮
+        const bilibiliPlayBtn = document.querySelector('.bpx-player-ctrl-play, .bilibili-player-video-btn-start');
+        if (bilibiliPlayBtn) {
+          bilibiliPlayBtn.click();
+          console.log('B站播放器: 播放/暂停');
+        } else {
+          // 通用视频元素控制
+          const videos = document.querySelectorAll('video');
+          if (videos.length > 0) {
+            const video = videos[0];
+            if (video.paused) {
+              video.play();
+              console.log('通用视频: 播放');
+            } else {
+              video.pause();
+              console.log('通用视频: 暂停');
+            }
+          } else {
+            console.log('未找到可控制的媒体元素');
+          }
+        }
+      `).catch(err => console.error('媒体控制失败:', err));
+      break;
+
+    case 'rewind':
+      browserWindow.webContents.executeJavaScript(`
+        // 尝试查找B站播放器
+        const videos = document.querySelectorAll('video');
+        if (videos.length > 0) {
+          const video = videos[0];
+          video.currentTime = Math.max(0, video.currentTime - 5);
+          console.log('视频后退5秒');
+        } else {
+          console.log('未找到视频元素');
+        }
+      `).catch(err => console.error('媒体控制失败:', err));
+      break;
+
+    case 'forward':
+      browserWindow.webContents.executeJavaScript(`
+        const videos = document.querySelectorAll('video');
+        if (videos.length > 0) {
+          const video = videos[0];
+          video.currentTime = Math.min(video.duration || video.currentTime + 5, video.currentTime + 5);
+          console.log('视频快进5秒');
+        } else {
+          console.log('未找到视频元素');
+        }
+      `).catch(err => console.error('媒体控制失败:', err));
+      break;
+
+    default:
+      console.log('Unknown media action:', action);
+  }
+}
+
+// 初始化C++快捷键模块
+function initializeHighPriorityShortcuts() {
+  if (!highPriorityShortcut) {
+    console.log('Using fallback Electron shortcuts');
+    return false;
+  }
+  
+  try {
+    // 安装钩子
+    highPriorityShortcut.installHook((action) => {
+      handleShortcut(action);
+    });
+    
+    // 注册快捷键
+    const shortcuts = store.get('shortcuts');
+    highPriorityShortcut.registerShortcuts(shortcuts);
+    
+    console.log('High-priority shortcuts initialized successfully');
+    return true;
+  } catch (err) {
+    console.error('Failed to initialize high-priority shortcuts:', err);
+    return false;
+  }
+}
+
+// 更新快捷键
+function updateShortcuts(newShortcuts) {
+  store.set('shortcuts', newShortcuts);
+  
+  if (highPriorityShortcut) {
+    try {
+      highPriorityShortcut.registerShortcuts(newShortcuts);
+      console.log('Shortcuts updated successfully');
+    } catch (err) {
+      console.error('Failed to update shortcuts:', err);
+    }
+  }
+}
 
 function createMainWindow() {
   const { width, height } = store.get('mainWindowBounds');
@@ -74,8 +230,6 @@ function createMainWindow() {
       browserWindow.close();
     }
   });
-
-  registerGlobalShortcuts();
 }
 
 // 创建播放器窗口
@@ -130,7 +284,7 @@ function createBrowserWindow(url) {
 
   browserWindow.once('ready-to-show', () => {
     browserWindow.show();
-    registerShortcuts(); // 窗口就绪后立即注册快捷键
+
   });
   
   const urlToLoad = url || store.get('lastUrl');
@@ -168,9 +322,7 @@ function createBrowserWindow(url) {
     mainWindow.webContents.send('browser-window-created');
   }
   
-  // 监听最小化和恢复事件，以动态更新快捷键
-  browserWindow.on('minimize', () => registerShortcuts());
-  browserWindow.on('restore', () => registerShortcuts());
+
 }
 
 function toggleBrowserVisibility() {
@@ -186,7 +338,7 @@ function toggleBrowserVisibility() {
         mainWindow.webContents.send('browser-window-created');
       }
     }
-    registerShortcuts(); // 切换可见性后重新注册快捷键
+
   } else {
     createBrowserWindow(); // 调用时不带URL，使用默认值
   }
@@ -226,106 +378,12 @@ function adjustBrowserOpacity(delta) {
   }
 }
 
-// 注册全局快捷键
-function registerGlobalShortcuts() {
-  const shortcuts = store.get('shortcuts');
-  
-  globalShortcut.unregisterAll();
-  
-  if (shortcuts.toggleBrowser) {
-    globalShortcut.register(shortcuts.toggleBrowser, debouncedToggleShortcut);
-  }
-  
-  if (shortcuts.increaseOpacity) {
-    globalShortcut.register(shortcuts.increaseOpacity, () => adjustBrowserOpacity(0.1));
-  }
-  
-  if (shortcuts.decreaseOpacity) {
-    globalShortcut.register(shortcuts.decreaseOpacity, () => adjustBrowserOpacity(-0.1));
-  }
-}
 
-function registerShortcuts() {
-  const shortcuts = store.get('shortcuts');
-  globalShortcut.unregisterAll();
 
-  // 始终定义媒体操作，以避免引用错误
-  const mediaActions = {
-    playPause: `
-      (() => {
-        const playButton = document.querySelector('.bpx-player-ctrl-play');
-        if (playButton) {
-          playButton.click();
-          return true;
-        }
-        const video = document.querySelector('video');
-        if (video) {
-          if (video.paused) video.play(); else video.pause();
-          return true;
-        }
-        return false;
-      })()
-    `,
-    rewind: `
-      (() => {
-        const video = document.querySelector('.bpx-player-video-wrap video, video');
-        if (video) {
-          video.currentTime = Math.max(0, video.currentTime - 5);
-          return true;
-        }
-        return false;
-      })()
-    `,
-    forward: `
-      (() => {
-        const video = document.querySelector('.bpx-player-video-wrap video, video');
-        if (video) {
-          video.currentTime += 5;
-          return true;
-        }
-        return false;
-      })()
-    `
-  };
 
-  // 切换快捷键改为调用新的处理函数
-  if (shortcuts.toggleBrowser) {
-    globalShortcut.register(shortcuts.toggleBrowser, debouncedToggleShortcut);
-  }
-
-  // 仅当浏览器窗口可见且未最小化时，才注册媒体控制快捷键
-  if (browserWindow && browserWindow.isVisible() && !browserWindow.isMinimized()) {
-    Object.keys(mediaActions).forEach(action => {
-      if (shortcuts[action]) {
-        globalShortcut.register(shortcuts[action], () => {
-          if (browserWindow) {
-            browserWindow.webContents.executeJavaScript(mediaActions[action])
-              .then(result => {
-                if (result && mainWindow) {
-                  mainWindow.webContents.send('shortcut-triggered', action);
-                }
-              })
-              .catch(err => {
-                console.error(`快捷键脚本执行失败 (${action}):`, err.message);
-              });
-          }
-        });
-      }
-    });
-
-    if (shortcuts.increaseOpacity) {
-      globalShortcut.register(shortcuts.increaseOpacity, () => adjustBrowserOpacity(0.1));
-    }
-    
-    if (shortcuts.decreaseOpacity) {
-      globalShortcut.register(shortcuts.decreaseOpacity, () => adjustBrowserOpacity(-0.1));
-    }
-  }
-}
 
 ipcMain.on('update-shortcuts', (_, newShortcuts) => {
-  store.set('shortcuts', newShortcuts);
-  registerGlobalShortcuts();
+  updateShortcuts(newShortcuts);
 });
 
 ipcMain.on('toggle-browser', toggleBrowserVisibility);
@@ -367,7 +425,10 @@ ipcMain.on('set-gpu-acceleration', (event, enabled) => {
   store.set('enableGpuAcceleration', enabled);
 });
 
-app.whenReady().then(createMainWindow);
+app.whenReady().then(() => {
+  createMainWindow();
+  initializeHighPriorityShortcuts();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -376,5 +437,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  if (highPriorityShortcut) {
+    try {
+      highPriorityShortcut.uninstallHook();
+    } catch (err) {
+      console.error('Failed to uninstall hook:', err);
+    }
+  }
   globalShortcut.unregisterAll();
-}); 
+});

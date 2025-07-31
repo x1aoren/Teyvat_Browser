@@ -6,7 +6,9 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build-native": "cd src/native && npm install && node-gyp rebuild",
+    "install-native": "cd src/native && npm install"
   },
   "keywords": ["electron", "genshin-impact", "browser"],
   "author": "Teyvat Developer",
@@ -18,6 +20,9 @@
   },
   "devDependencies": {
     "electron-builder": "^24.6.4"
+  },
+  "optionalDependencies": {
+    "high-priority-shortcut": "file:./src/native"
   },
   "build": {
     "appId": "com.teyvat.browser",
