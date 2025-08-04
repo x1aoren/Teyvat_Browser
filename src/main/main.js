@@ -4,6 +4,7 @@ const Store = require('electron-store');
 
 // 尝试加载C++模块
 let highPriorityShortcut = null;
+let highPriorityTopmost = null;
 try {
   highPriorityShortcut = require('../native/lib/binding.js');
   console.log('Successfully loaded high-priority shortcut module');
@@ -14,6 +15,20 @@ try {
     installHook: () => { console.warn('C++ shortcuts not available, using fallback'); },
     registerShortcuts: () => { console.warn('C++ shortcuts not available'); },
     uninstallHook: () => { console.warn('C++ shortcuts not available'); }
+  };
+}
+
+try {
+  highPriorityTopmost = require('../native/lib/topmost.js');
+  console.log('Successfully loaded high-priority topmost module');
+} catch (err) {
+  console.log('Failed to load high-priority topmost module:', err);
+  // 提供一个后备实现
+  highPriorityTopmost = {
+    startMonitoring: () => { console.warn('C++ topmost not available'); return false; },
+    stopMonitoring: () => { console.warn('C++ topmost not available'); return false; },
+    setTopmost: () => { console.warn('C++ topmost not available'); return false; },
+    isAvailable: () => false
   };
 }
 
@@ -259,6 +274,9 @@ function createMainWindow() {
     height,
     title: '提瓦特浏览器 - 控制台',
     icon: path.join(__dirname, '../renderer/assets/logo.png'), // 设置窗口图标
+    alwaysOnTop: false, // 确保主窗口不置顶
+    skipTaskbar: false, // 确保在任务栏显示
+    show: true, // 确保窗口显示
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -281,6 +299,13 @@ function createMainWindow() {
     if (browserWindow) {
       browserWindow.close();
     }
+  });
+  
+  // 确保主窗口在任务栏正常显示且不被置顶
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.setSkipTaskbar(false);
+    mainWindow.setAlwaysOnTop(false);
+    console.log('Main window configured: taskbar=true, topmost=false');
   });
 }
 
@@ -326,7 +351,8 @@ function createBrowserWindow(url) {
     autoHideMenuBar: true, // 隐藏菜单栏 (文件, 视图等)
     fullscreenable: false, // 禁止窗口进入OS全屏，以优化网页内视频的全屏体验
     icon: path.join(__dirname, '../renderer/assets/logo.png'), // 设置窗口图标
-    alwaysOnTop: true, // 始终置顶
+    alwaysOnTop: false, // 初始不置顶，由高级置顶模块控制
+    skipTaskbar: false, // 在任务栏显示浏览器窗口
     show: false,
     webPreferences: {
       nodeIntegration: false,
@@ -336,7 +362,30 @@ function createBrowserWindow(url) {
 
   browserWindow.once('ready-to-show', () => {
     browserWindow.show();
-
+    
+    console.log('Browser window ready, setting topmost');
+    
+    // 设置浏览器窗口置顶
+    setBrowserWindowTopmost();
+    
+    // 确保主窗口不置顶
+    if (mainWindow) {
+      mainWindow.setAlwaysOnTop(false);
+      console.log('Main window topmost disabled');
+    }
+    
+    // 启用高级置顶功能（如果可用，延迟启动）
+    if (highPriorityTopmost && highPriorityTopmost.isAvailable()) {
+      setTimeout(() => {
+        console.log('Starting advanced topmost monitoring');
+        try {
+          const result = startAdvancedTopmost();
+          console.log('Advanced topmost result:', result);
+        } catch (err) {
+          console.error('Advanced topmost error:', err);
+        }
+      }, 2000);
+    }
   });
   
   const urlToLoad = url || store.get('lastUrl');
@@ -364,6 +413,16 @@ function createBrowserWindow(url) {
   browserWindow.on('move', debouncedSaveBounds);
 
   browserWindow.on('closed', () => {
+    // 停止topmost监控
+    if (highPriorityTopmost && highPriorityTopmost.isAvailable()) {
+      try {
+        highPriorityTopmost.stopMonitoring();
+        console.log('Stopped topmost monitoring for browser window');
+      } catch (err) {
+        console.error('Error stopping topmost monitoring:', err);
+      }
+    }
+    
     browserWindow = null;
     if (mainWindow) {
       mainWindow.webContents.send('browser-window-closed');
@@ -430,6 +489,114 @@ function adjustBrowserOpacity(delta) {
   }
 }
 
+// 启动高级置顶功能（带重试机制）
+function startAdvancedTopmost(retryCount = 3) {
+  if (!browserWindow || !highPriorityTopmost || !highPriorityTopmost.isAvailable()) {
+    return false;
+  }
+  
+  // 获取所有可见窗口用于调试
+  try {
+    const allWindows = highPriorityTopmost.getVisibleWindows();
+    console.log('Available windows:', allWindows.map(w => w.title).slice(0, 5)); // 只显示前5个
+    
+    // 尝试多种窗口标题匹配策略
+    const actualTitle = browserWindow.getTitle();
+    console.log('Current browser window title:', actualTitle);
+    
+    const titleVariants = [
+      actualTitle,             // 当前网页的实际标题
+      '提瓦特浏览器',           // 原始中文标题
+      'Teyvat Browser',        // 英文标题
+      'Teyvat'                // 部分匹配
+    ];
+    
+    let success = false;
+    for (const title of titleVariants) {
+      if (title && title.trim()) {
+        try {
+          console.log(`Trying to monitor window with title: "${title}"`);
+          success = highPriorityTopmost.startMonitoring(title);
+          if (success) {
+            console.log(`Advanced topmost monitoring started successfully with title: "${title}"`);
+            break;
+          }
+        } catch (err) {
+          console.log(`Failed to monitor "${title}":`, err.message);
+        }
+      }
+    }
+    
+    if (success) {
+      return true;
+    } else if (retryCount > 0) {
+      console.log(`Retrying advanced topmost in 2 seconds... (${retryCount} attempts left)`);
+      setTimeout(() => startAdvancedTopmost(retryCount - 1), 2000);
+      return false;
+    } else {
+      console.log('All advanced topmost attempts failed, using basic topmost');
+      browserWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+      return false;
+    }
+  } catch (err) {
+    console.error('Error in startAdvancedTopmost:', err);
+    // 确保基本置顶功能
+    browserWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    return false;
+  }
+}
+
+// 简单设置浏览器窗口置顶
+function setBrowserWindowTopmost() {
+  if (!browserWindow || browserWindow.isDestroyed()) {
+    console.log('Browser window not available');
+    return false;
+  }
+  
+  console.log('Setting browser window topmost');
+  browserWindow.setAlwaysOnTop(true);
+  console.log('Browser window topmost status:', browserWindow.isAlwaysOnTop());
+  
+  return browserWindow.isAlwaysOnTop();
+}
+
+// 简化的置顶功能控制（仅针对浏览器窗口）
+function toggleAdvancedTopmost(enable = null) {
+  if (!browserWindow) {
+    console.log('No browser window to apply topmost');
+    return false;
+  }
+  
+  const currentTopmost = store.get('advancedTopmost', true);
+  const newTopmost = enable !== null ? enable : !currentTopmost;
+  
+  store.set('advancedTopmost', newTopmost);
+  
+  if (newTopmost) {
+    // 设置基本置顶
+    setBrowserWindowTopmost();
+    
+    // 尝试高级置顶（如果可用）
+    if (highPriorityTopmost && highPriorityTopmost.isAvailable()) {
+      try {
+        const result = startAdvancedTopmost();
+        console.log('Advanced topmost result:', result);
+      } catch (err) {
+        console.error('Error with advanced topmost:', err);
+      }
+    }
+    return true;
+  } else {
+    // 禁用置顶
+    if (highPriorityTopmost && highPriorityTopmost.isAvailable()) {
+      highPriorityTopmost.stopMonitoring();
+    }
+    browserWindow.setAlwaysOnTop(false);
+    console.log('Topmost disabled for browser window');
+    return true;
+  }
+}
+
 
 
 
@@ -477,6 +644,23 @@ ipcMain.on('set-gpu-acceleration', (event, enabled) => {
   store.set('enableGpuAcceleration', enabled);
 });
 
+ipcMain.on('toggle-advanced-topmost', (event, enabled) => {
+  const success = toggleAdvancedTopmost(enabled);
+  event.reply('advanced-topmost-result', {
+    success,
+    enabled: store.get('advancedTopmost', true),
+    hasModule: highPriorityTopmost && highPriorityTopmost.isAvailable()
+  });
+});
+
+ipcMain.on('get-topmost-status', (event) => {
+  event.reply('topmost-status', {
+    enabled: store.get('advancedTopmost', true),
+    hasModule: highPriorityTopmost && highPriorityTopmost.isAvailable(),
+    isWindowTopmost: browserWindow ? browserWindow.isAlwaysOnTop() : false
+  });
+});
+
 app.whenReady().then(() => {
   createMainWindow();
   initializeHighPriorityShortcuts();
@@ -489,12 +673,24 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  // 清理快捷键资源
   if (highPriorityShortcut) {
     try {
       highPriorityShortcut.uninstallHook();
     } catch (err) {
-      console.error('Failed to uninstall hook:', err);
+      console.error('Failed to uninstall shortcut hook:', err);
     }
   }
+  
+  // 清理topmost监控资源
+  if (highPriorityTopmost && highPriorityTopmost.isAvailable()) {
+    try {
+      highPriorityTopmost.stopMonitoring();
+      console.log('Cleaned up topmost monitoring resources');
+    } catch (err) {
+      console.error('Failed to cleanup topmost resources:', err);
+    }
+  }
+  
   globalShortcut.unregisterAll();
 });

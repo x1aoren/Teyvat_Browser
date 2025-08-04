@@ -1,7 +1,7 @@
 {
-  "name": "high-priority-shortcut",
-  "version": "a1.0",
-  "description": "A high priority global shortcut module for Electron app",
+  "name": "high-priority-modules",
+  "version": "0.2.0",
+  "description": "High priority modules for Electron app including shortcuts and window topmost functionality",
   "main": "lib/binding.js",
   "scripts": {
     "install": "node-gyp rebuild",
@@ -14,5 +14,9 @@
   "devDependencies": {
     "node-gyp": "^9.0.0"
   },
-  "gypfile": true
+  "gypfile": true,
+  "exports": {
+    "./shortcut": "./lib/binding.js",
+    "./topmost": "./lib/topmost.js"
+  }
 }

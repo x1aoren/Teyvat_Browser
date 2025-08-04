@@ -4,14 +4,14 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
   // 从渲染器到主进程
   send: (channel, data) => {
-    const validChannels = ['toggle-browser', 'adjust-opacity', 'update-shortcuts', 'navigate-browser', 'get-initial-settings', 'set-gpu-acceleration', 'open-external-link'];
+    const validChannels = ['toggle-browser', 'adjust-opacity', 'update-shortcuts', 'navigate-browser', 'get-initial-settings', 'set-gpu-acceleration', 'open-external-link', 'toggle-advanced-topmost', 'get-topmost-status'];
     if (validChannels.includes(channel)) {
       ipcRenderer.send(channel, data);
     }
   },
   // 监听主进程消息
   receive: (channel, func) => {
-    const validChannels = ['browser-window-created', 'browser-window-closed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate', 'initial-settings'];
+    const validChannels = ['browser-window-created', 'browser-window-closed', 'browser-opacity-changed', 'shortcut-triggered', 'navigate', 'initial-settings', 'advanced-topmost-result', 'topmost-status'];
     if (validChannels.includes(channel)) {
       // 删除旧的事件监听器以避免重复
       ipcRenderer.removeAllListeners(channel);
@@ -21,6 +21,6 @@ contextBridge.exposeInMainWorld('electron', {
   },
   // 获取版本信息
   getAppVersion: () => {
-    return process.env.npm_package_version || 'alpha1.0';
+    return process.env.npm_package_version || '0.2.0';
   }
 }); 
