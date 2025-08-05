@@ -30,9 +30,9 @@ const views = {
 // 快捷键配置
 const defaultShortcuts = {
   toggleBrowser: 'Insert',
-  playPause: 'Shift+F1',
-  rewind: 'Shift+F2',
-  forward: 'Shift+F3',
+  playPause: 'F1',
+  rewind: 'F2',
+  forward: 'F3',
   increaseOpacity: 'Control+Up',
   decreaseOpacity: 'Control+Down'
 };

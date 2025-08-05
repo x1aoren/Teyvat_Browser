@@ -53,9 +53,9 @@ const store = new Store({
     lastUrl: 'https://www.bilibili.com',
     shortcuts: {
       toggleBrowser: 'Insert',
-      playPause: 'Shift+F1',
-      rewind: 'Shift+F2',
-      forward: 'Shift+F3',
+      playPause: 'F1',
+      rewind: 'F2',
+      forward: 'F3',
       increaseOpacity: 'Control+Up',
       decreaseOpacity: 'Control+Down',
       // 鼠标侧键示例（可选，用户可自定义）
