@@ -1,0 +1,174 @@
+name: 构建和发布
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: 设置 MSBuild
+      uses: microsoft/setup-msbuild@v2
+      
+    - name: 设置 Python 用于 node-gyp
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: 安装 Windows 构建工具
+      run: |
+        npm install -g windows-build-tools@4.0.0 --quiet
+      continue-on-error: true
+      timeout-minutes: 10
+      
+    - name: 配置 npm 用于 Windows
+      run: |
+        npm config set msvs_version 2017
+        npm config set python python3
+        
+    - name: 安装主依赖
+      run: npm install
+      
+    - name: 安装原生模块依赖
+      run: |
+        cd src/native
+        npm install
+        
+    - name: 构建原生模块
+      run: |
+        cd src/native
+        npx node-gyp configure --msvs_version=2017
+        npx node-gyp build --release
+        
+    - name: 验证原生模块
+      run: |
+        if (Test-Path "src/native/build/Release/high_priority_shortcut.node") {
+          Write-Host "✅ high_priority_shortcut.node built successfully"
+        } else {
+          Write-Error "❌ high_priority_shortcut.node build failed"
+          exit 1
+        }
+        if (Test-Path "src/native/build/Release/high_priority_topmost.node") {
+          Write-Host "✅ high_priority_topmost.node built successfully"
+        } else {
+          Write-Error "❌ high_priority_topmost.node build failed"
+          exit 1
+        }
+      shell: powershell
+      
+    - name: 构建 Electron 应用 (便携版 EXE)
+      run: npx electron-builder --win portable --x64
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 构建 Electron 应用 (目录/ZIP)
+      run: npx electron-builder --win dir --x64
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 从目录构建创建 ZIP
+      run: |
+        cd dist/win-unpacked
+        Compress-Archive -Path * -DestinationPath "../teyvat-browser-win32-x64.zip"
+        cd ../..
+      shell: powershell
+      
+    - name: 列出构建输出
+      run: |
+        Write-Host "=== Build Output Directory ==="
+        Get-ChildItem -Path "dist" -Recurse | Format-Table Name,Length,LastWriteTime
+      shell: powershell
+      
+    - name: 上传便携版 EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: teyvat-browser-portable-exe
+        path: dist/*.exe
+        retention-days: 30
+        
+    - name: 上传 ZIP 包
+      uses: actions/upload-artifact@v4
+      with:
+        name: teyvat-browser-zip
+        path: dist/teyvat-browser-win32-x64.zip
+        retention-days: 30
+        
+    - name: 上传目录构建
+      uses: actions/upload-artifact@v4
+      with:
+        name: teyvat-browser-directory
+        path: dist/win-unpacked/
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 下载所有构建产物
+      uses: actions/download-artifact@v4
+      
+    - name: 显示下载文件结构
+      run: ls -la -R
+      
+    - name: 创建发布
+      uses: softprops/action-gh-release@v2
+      with:
+        name: 提瓦特浏览器 ${{ github.ref_name }}
+        body: |
+          ## 🎮 提瓦特浏览器 新版本发布！
+          
+          ### 📦 下载说明
+          - **便携版EXE**: `提瓦特浏览器-便携版.exe` - 单个exe文件，双击即可运行
+          - **完整版ZIP**: `提瓦特浏览器-完整版.zip` - 包含所有文件的压缩包
+          
+          ### ⚠️ 重要提醒
+          - **必须以管理员身份运行**，才能在游戏中使用快捷键
+          - 首次运行可能需要几分钟来初始化
+          - 建议添加到杀毒软件白名单
+          
+          ### 🆕 默认快捷键
+          - **F1**: 播放/暂停
+          - **F2**: 后退5秒  
+          - **F3**: 前进5秒
+          - **Insert**: 显示/隐藏浏览器
+          - **Ctrl+↑/↓**: 调节透明度
+          
+          ### 💬 问题反馈
+          如有问题请加QQ群：1003862782
+          
+          ---
+          自动构建时间: ${{ github.event.head_commit.timestamp }}
+        files: |
+          teyvat-browser-portable-exe/*.exe
+          teyvat-browser-zip/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

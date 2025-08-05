@@ -94,6 +94,28 @@ npm start
 npm run build:win
 ```
 
+## 🤖 自动化构建
+
+本项目配置了完整的GitHub Actions自动化构建系统：
+
+### 📦 获取最新版本
+- 访问 [Releases页面](../../releases) 下载最新版本
+- 每次版本发布都会自动构建Windows版本
+
+### 🔧 手动构建
+1. Fork本仓库到你的GitHub账号
+2. 进入Actions页面，选择"Manual Build"
+3. 点击"Run workflow"开始构建
+4. 构建完成后下载Artifacts
+
+### 📋 构建说明
+- ✅ 自动构建便携版EXE和完整版ZIP
+- ✅ 自动编译C++原生模块
+- ✅ 版本标签自动发布Release
+- ✅ 详细构建日志和错误提示
+
+详细说明请查看：[CI构建文档](.github/README-CI.md)
+
 ## 怎么设置？
 
 ### 🎯 快捷键设置
@@ -167,6 +189,7 @@ npm run build
 - 🔄 优化窗口标题匹配策略，优先使用实际网页标题
 - 📦 修复electron-builder构建过程中的版本号和签名问题
 - 🖥️ 确保主窗口在任务栏正常显示
+- 🔄优化快捷键配置，将媒体控制快捷键从Shift+F1/F2/F3更改为F1/F2/F3，以提升用户体验。
 
 #### 📁 文件结构变化
 ```

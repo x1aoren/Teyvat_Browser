@@ -1,0 +1,77 @@
+name: 手动构建
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+        - both
+        - portable
+        - zip
+      upload_artifacts:
+        description: '上传构建产物'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  manual-build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+        
+    - name: 设置 MSBuild
+      uses: microsoft/setup-msbuild@v2
+    - name: 设置 Python 用于 node-gyp
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: 配置 npm 用于 Windows
+      run: |
+        npm config set msvs_version 2017
+        npm config set python python3
+        
+    - name: 安装依赖
+      run: npm install
+      
+    - name: 构建原生模块
+      run: npm run build-native
+      
+    - name: 构建便携版 EXE
+      if: ${{ github.event.inputs.build_type == 'both' || github.event.inputs.build_type == 'portable' }}
+      run: npx electron-builder --win portable --x64
+      
+    - name: 构建目录并创建 ZIP
+      if: ${{ github.event.inputs.build_type == 'both' || github.event.inputs.build_type == 'zip' }}
+      run: |
+        npx electron-builder --win dir --x64
+        cd dist/win-unpacked
+        Compress-Archive -Path * -DestinationPath "../teyvat-browser-manual-build.zip"
+      shell: powershell
+      
+    - name: 上传便携版 EXE
+      if: ${{ github.event.inputs.upload_artifacts == 'true' && (github.event.inputs.build_type == 'both' || github.event.inputs.build_type == 'portable') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: teyvat-browser-manual-portable
+        path: dist/*.exe
+        
+    - name: 上传 ZIP
+      if: ${{ github.event.inputs.upload_artifacts == 'true' && (github.event.inputs.build_type == 'both' || github.event.inputs.build_type == 'zip') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: teyvat-browser-manual-zip
+        path: dist/teyvat-browser-manual-build.zip

@@ -73,4 +73,24 @@ start-*.ps1
 crash.log
 
 # Local configuration
-config.local.json 
+config.local.json
+
+# GitHub Actions artifacts (local testing)
+.github/workflows/test-runs/
+
+# Build artifacts and releases
+*.tar.gz
+*.dmg
+*.AppImage
+*.snap
+
+# Electron-builder output in different formats
+dist/*.yml
+dist/*.yaml
+dist/builder-*.json
+
+# Additional native build artifacts
+*.lib
+*.exp
+*.ilk
+*.pdb
