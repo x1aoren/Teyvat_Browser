@@ -35,30 +35,18 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: 安装 Windows 构建工具
+
+    - name: 设置构建环境变量
       run: |
-        npm install -g windows-build-tools@4.0.0 --quiet
-      continue-on-error: true
-      timeout-minutes: 10
-      
-    - name: 配置 npm 用于 Windows
-      run: |
-        npm config set msvs_version 2017
-        npm config set python python3
+        echo "GYP_MSVS_VERSION=2017" >> $GITHUB_ENV
+        echo "npm_config_python=python" >> $GITHUB_ENV
+      shell: bash
         
     - name: 安装主依赖
       run: npm install
       
-    - name: 安装原生模块依赖
-      run: |
-        cd src/native
-        npm install
-        
     - name: 构建原生模块
-      run: |
-        cd src/native
-        npx node-gyp configure --msvs_version=2017
-        npx node-gyp build --release
+      run: npm run build-native
         
     - name: 验证原生模块
       run: |
