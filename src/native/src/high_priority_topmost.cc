@@ -19,21 +19,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     char windowTextA[512];
     wchar_t windowTextW[512];
     GetWindowTextA(hwnd, windowTextA, sizeof(windowTextA));
-    GetWindowTextW(h  ⨯ Cannot use 'in' operator to search for 'file' in undefined  failedTask=build stackTrace=TypeError: Cannot use 'in' operator to search for 'file' in undefined
-        at doSign (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\codeSign\windowsCodeSign.ts:154:70)
-        at sign (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\codeSign\windowsCodeSign.ts:60:7)
-    From previous event:
-        at processImmediate (node:internal/timers:491:21)
-    From previous event:
-        at WinPackager.signApp (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\winPackager.ts:384:27)
-        at WinPackager.doSignAfterPack (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\platformPackager.ts:336:32)
-        at WinPackager.doPack (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\platformPackager.ts:321:7)
-        at WinPackager.pack (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\platformPackager.ts:140:5)
-        at Packager.doBuild (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\packager.ts:445:9)
-        at executeFinally (H:\projects\Teyvat_Browser\node_modules\builder-util\src\promise.ts:12:14)
-        at Packager._build (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\packager.ts:379:31)
-        at Packager.build (H:\projects\Teyvat_Browser\node_modules\app-builder-lib\src\packager.ts:340:12)
-        at executeFinally (H:\projects\Teyvat_Browser\node_modules\builder-util\src\promise.ts:12:14)wnd, windowTextW, sizeof(windowTextW)/sizeof(wchar_t));
+    GetWindowTextW(hwnd, windowTextW, sizeof(windowTextW)/sizeof(wchar_t));
     
     char className[256];
     GetClassNameA(hwnd, className, sizeof(className));
