@@ -9,7 +9,7 @@
     "build:portable": "electron-builder --win portable",
     "build:dir": "electron-builder --win dir",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build-native": "cd src/native && npm install && node-gyp rebuild --msvs_version=2017",
+    "build-native": "cd src/native && npm install && node-gyp rebuild",
     "install-native": "cd src/native && npm install",
     "prebuild": "npm run build-native",
     "ci:build": "npm run build-native && npm run build:win"
